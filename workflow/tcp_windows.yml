@@ -1,0 +1,29 @@
+name: CRD Final Connection
+on: [push, workflow_dispatch]
+
+jobs:
+  run-crd:
+    runs-on: windows-latest
+    steps:
+      - name: Cai dat CRD (Link chuan)
+        shell: powershell
+        run: |
+          # 1. Tải file từ link bạn vừa gửi
+          $url = "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
+          $output = "crd.msi"
+          Start-BitsTransfer -Source $url -Destination $output
+          
+          # 2. Cài đặt câm (không giao diện)
+          Start-Process "msiexec.exe" -ArgumentList "/i crd.msi /qn" -Wait
+
+      - name: Ket noi voi tai khoan Google
+        shell: powershell
+        env:
+          CMD_CODE: ${{ secrets.POWERSHELL_CODE_REMOTEDESKTOP }}
+          PIN: ${{ secrets.PIN }}
+        run: |
+          $finalCmd = $env:CMD_CODE + " --pin=" + $env:PIN
+          Invoke-Expression $finalCmd
+          
+      - name: Giu ket noi
+        run: Start-Sleep -Seconds 21600
