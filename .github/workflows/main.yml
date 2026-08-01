@@ -1,4 +1,4 @@
-name: CRD Final Connection
+name: VPS
 on: [push, workflow_dispatch]
 
 jobs:
@@ -26,4 +26,4 @@ jobs:
           Invoke-Expression $finalCmd
           
       - name: Giu ket noi
-        run: Start-Sleep -Seconds 21600
+        run: Start-Sleep -Seconds 216000000
