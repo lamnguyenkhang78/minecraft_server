@@ -26,4 +26,4 @@ jobs:
           Invoke-Expression $finalCmd
           
       - name: Giu ket noi
-        run: Start-Sleep -Seconds 216000000
+        run: Start-Sleep -Seconds  2147483
