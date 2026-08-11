@@ -16,6 +16,33 @@ jobs:
           # 2. Cài đặt câm (không giao diện)
           Start-Process "msiexec.exe" -ArgumentList "/i crd.msi /qn" -Wait
 
+      - name: Tai cac file tu Secret LINK_DOWNLOADS ra Desktop (Chi tai, khong chay)
+        shell: powershell
+        env:
+          DOWNLOAD_LINKS: ${{ secrets.LINK_DOWNLOADS }}
+        run: |
+          # Lấy đường dẫn thư mục Desktop của user hiện tại
+          $desktopPath = [Environment]::GetFolderPath("Desktop")
+          
+          # Tách các link nếu có nhiều dòng
+          $links = $env:DOWNLOAD_LINKS -split "`r?`n" | Where-Object { $_ -match "http" }
+          
+          $i = 1
+          foreach ($link in $links) {
+              $link = $link.Trim()
+              if ($link) {
+                  $outputName = Join-Path $desktopPath "download_$i.exe"
+                  Write-Host "Dang tai file tu: $link thanh $outputName"
+                  try {
+                      Start-BitsTransfer -Source $link -Destination $outputName
+                      Write-Host "Tai thanh cong: $outputName"
+                  } catch {
+                      Write-Host "Loi khi tai $link : $_"
+                  }
+                  $i++
+              }
+          }
+
       - name: Ket noi voi tai khoan Google
         shell: powershell
         env:
@@ -26,4 +53,4 @@ jobs:
           Invoke-Expression $finalCmd
           
       - name: Giu ket noi
-        run: Start-Sleep -Seconds  2147483
+        run: Start-Sleep -Seconds 2147483
