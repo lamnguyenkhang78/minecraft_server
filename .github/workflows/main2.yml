@@ -5,10 +5,15 @@ jobs:
   run-crd:
     runs-on: windows-latest
     steps:
-      - name: Cai dat CRD (Link chuan)
+      - name: download library
         shell: powershell
         run: |
-          
+          pip install playwright
+          playwright install chromium
+
+      - name: create file 
+        shell: powershell
+        run: |
           
           
 
