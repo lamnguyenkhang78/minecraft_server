@@ -1,10 +1,9 @@
-name: mywork
+name: VPS
 
 on:
   push:
   workflow_dispatch:
   schedule:
-    # Lịch chạy cách nhau 6 tiếng, bắt đầu từ 6h sáng giờ Việt Nam (23:00, 05:00, 11:00, 17:00 UTC)
     - cron: '23 5,11,17 * * *'
     - cron: '23 23 * * *'
 
@@ -33,19 +32,27 @@ jobs:
           from playwright.sync_api import sync_playwright
 
           def kiem_tra_va_xu_ly():
+              print("==================================================")
+              print("[INIT] Bắt đầu khởi chạy tiến trình tự động hóa...")
+              print("==================================================")
+              
               extension_url = os.environ.get("CHROME_EXTENSION_LINK", "")
               work_link = os.environ.get("MY_WORK_LINK", "")
               work_mail = os.environ.get("MY_WORK_MAIL", "")
               work_password = os.environ.get("MY_WORK_PASSWORD", "")
 
-              print("[LOG] Bắt đầu khởi chạy trình duyệt tự động...")
+              print(f"[CONFIG] Link Extension: {extension_url}")
+              print(f"[CONFIG] Link làm việc: {work_link}")
+              print(f"[CONFIG] Tài khoản Mail: {work_mail}")
 
               with sync_playwright() as p:
                   profile_dir = r"C:\temp\playwright_profile_raptor"
                   if os.path.exists(profile_dir):
+                      print("[LOG] Xóa profile cũ để làm sạch dữ liệu...")
                       try: shutil.rmtree(profile_dir)
-                      except: pass
+                      except Exception as e: print(f"[WARNING] Không xóa được profile cũ: {e}")
 
+                  print("[LOG] Đang khởi chạy trình duyệt Chromium (headless=False)...")
                   context = p.chromium.launch_persistent_context(
                       user_data_dir=profile_dir,
                       headless=False,
@@ -56,71 +63,102 @@ jobs:
                   page = context.new_page()
 
                   try:
-                      # 1. Cài extension nếu có
+                      # BƯỚC 1: Cài đặt Extension
+                      print("\n--------------------------------------------------")
+                      print("[STEP 1] Đang tiến hành cài đặt Extension...")
+                      print("--------------------------------------------------")
                       if extension_url:
+                          print(f"[STEP 1] Truy cập URL: {extension_url}")
                           page.goto(extension_url, wait_until="domcontentloaded")
                           time.sleep(3)
+                          print("[STEP 1] Đang tìm và bấm nút 'Add to chrome'...")
                           try:
                               page.get_by_role("button", name="Add to chrome").click(force=True)
-                          except:
+                              print("[STEP 1 - SUCCESS] Đã bấm nút 'Add to chrome' thành công!")
+                          except Exception as e:
+                              print(f"[STEP 1 - RETRY] Không tìm thấy bằng role, thử tìm bằng text: {e}")
                               page.locator("text=Add to Chrome").first.click(force=True)
+                              print("[STEP 1 - SUCCESS] Đã bấm nút 'Add to Chrome' bằng text thành công!")
                           time.sleep(5)
+                      else:
+                          print("[STEP 1 - SKIPPED] Không tìm thấy biến CHROME_EXTENSION_LINK!")
 
-                      # 2. Vào trang login
+                      # BƯỚC 2: Truy cập trang đăng nhập
+                      print("\n--------------------------------------------------")
+                      print("[STEP 2] Truy cập trang đăng nhập hệ thống...")
+                      print("--------------------------------------------------")
                       if work_link:
+                          print(f"[STEP 2] Truy cập URL: {work_link}")
                           page.goto(work_link, wait_until="domcontentloaded")
                           time.sleep(2)
+                          print("[STEP 2 - SUCCESS] Đã vào trang Login thành công!")
+                      else:
+                          print("[STEP 2 - ERROR] Thiếu biến MY_WORK_LINK!")
 
-                      # 3. Đăng nhập
+                      # BƯỚC 3: Điền thông tin đăng nhập
+                      print("\n--------------------------------------------------")
+                      print("[STEP 3] Nhập thông tin Email và Password...")
+                      print("--------------------------------------------------")
+                      print(f"[STEP 3] Đang điền Email: {work_mail}")
                       page.fill("input[placeholder='Email']", work_mail)
+                      print("[STEP 3] Đang điền Password...")
                       page.fill("input[placeholder='Password']", work_password)
+                      print("[STEP 3 - SUCCESS] Đã điền xong thông tin đăng nhập!")
 
-                      # 4. Chờ giải Captcha (tối đa 5 phút)
-                      print("[LOG] Đang chờ giải Captcha...")
+                      # BƯỚC 4: Chờ giải reCAPTCHA
+                      print("\n--------------------------------------------------")
+                      print("[STEP 4] Chờ Extension giải mã reCAPTCHA...")
+                      print("--------------------------------------------------")
                       da_xong = False
-                      for _ in range(375):
+                      for i in range(1, 376):
                           try:
                               checked = page.frame_locator("iframe[title*='reCAPTCHA']").locator("#recaptcha-anchor").get_attribute("aria-checked")
                               if checked == "true":
+                                  print(f"[STEP 4 - SUCCESS] Phát hiện tích xanh reCAPTCHA ở lần kiểm tra thứ {i}!")
                                   da_xong = True
                                   break
                           except:
                               pass
+                          if i % 10 == 0:
+                              print(f"[STEP 4 - WAITING] Đang chờ giải Captcha... ({i}/375 lần kiểm tra)")
                           time.sleep(0.8)
 
                       if da_xong:
-                          # Nhấn Login
+                          print("[STEP 4 - SUCCESS] Tiến hành bấm nút Login...")
                           try:
                               page.get_by_role("button", name="Log in").click(force=True)
                           except:
                               page.locator("text=Log in").first.click(force=True)
                           
+                          print("[STEP 4] Đã bấm Login, chờ 5 giây để load vào dashboard...")
                           time.sleep(5)
 
-                          # 5. Kiểm tra trạng thái đồng hồ hoặc nút START
-                          print("[LOG] Đang kiểm tra trạng thái đồng hồ / nút START...")
+                          # BƯỚC 5: Kiểm tra trạng thái đồng hồ / nút START
+                          print("\n--------------------------------------------------")
+                          print("[STEP 5] Kiểm tra trạng thái đồng hồ hoặc nút START...")
+                          print("--------------------------------------------------")
                           
-                          # Vòng lặp kiểm tra trạng thái liên tục
+                          vong_lap = 0
                           while True:
+                              vong_lap += 1
                               text_trang_thai = page.content()
                               
-                              # Trường hợp đang hiển thị nút START
+                              # Trường hợp 1: Hiển thị nút START
                               if "START" in text_trang_thai and "MINING STARTED" not in text_trang_thai:
-                                  print("[LOG] Phát hiện nút START, tiến hành bấm...")
+                                  print(f"[STEP 5 - RESULT] (Vòng {vong_lap}) Phát hiện nút START! Tiến hành bấm...")
                                   try:
                                       page.get_by_text("START").click(force=True)
                                   except:
                                       page.locator("text=START").first.click(force=True)
                                   
-                                  print("[LOG] Đã bấm START, chờ đồng hồ đếm ngược chạy 10 giây rồi tắt máy...")
+                                  print("[STEP 5 - SUCCESS] Đã bấm START thành công! Đang chờ đồng hồ đếm ngược chạy 10 giây trước khi tắt máy...")
                                   time.sleep(10)
+                                  print("[FINISH] Hoàn thành quy trình và tắt máy.")
                                   break
 
-                              # Trường hợp đồng hồ đang chạy (MINING STARTED)
+                              # Trường hợp 2: Đồng hồ đang chạy (MINING STARTED)
                               elif "MINING STARTED" in text_trang_thai:
-                                  # Lấy chuỗi thời gian đếm ngược dạng HH:MM:SS
                                   try:
-                                      # Tìm phần tử hiển thị đồng hồ (ví dụ: 11:59:57)
                                       dong_ho_elem = page.locator("text=MINING STARTED").locator("..").locator("div").last
                                       thoi_gian_str = dong_ho_elem.inner_text().strip()
                                       
@@ -128,26 +166,29 @@ jobs:
                                       if len(parts) == 3:
                                           gio = int(parts[0])
                                           phut = int(parts[1])
+                                          giay = int(parts[2])
                                           
-                                          print(f"[INFO] Thời gian còn lại trên đồng hồ: {gio} giờ {phut} phút")
+                                          print(f"[STEP 5 - CHECK] (Vòng {vong_lap}) Thời gian đồng hồ hiện tại: {gio} giờ {phut} phút {giay} giây")
 
-                                          # Nếu trên 3 giờ -> Tắt máy luôn để chạy lần khác
+                                          # Nếu trên 3 giờ -> Tắt máy luôn
                                           if gio >= 3:
-                                              print("[LOG] Đồng hồ còn trên 3 giờ. Tắt máy theo yêu cầu!")
+                                              print(f"[STEP 5 - ACTION] Thời gian còn lại >= 3 giờ ({gio}h). Tắt máy theo yêu cầu!")
                                               break
                                           else:
-                                              # Nếu dưới 3 giờ -> Chờ cho tới khi hết giờ / hiện nút START
-                                              print("[LOG] Đồng hồ còn dưới 3 giờ, đang chờ đồng hồ chạy xong...")
+                                              print(f"[STEP 5 - ACTION] Thời gian còn lại < 3 giờ ({gio}h {phut}p). Đang chờ đồng hồ chạy xong để bấm START...")
                                   except Exception as ex:
-                                      print(f"[DEBUG] Đang đọc trạng thái đồng hồ: {ex}")
+                                      print(f"[DEBUG] Đang đọc định dạng đồng hồ: {ex}")
+                              else:
+                                  print(f"[STEP 5 - CHECK] (Vòng {vong_lap}) Chưa tìm thấy trạng thái START hoặc MINING STARTED, đang tải lại trang...")
 
-                              time.sleep(5) # Kiểm tra lại sau mỗi 5 giây
+                              time.sleep(5)
                       else:
-                          print("[WARNING] Quá thời gian chờ giải Captcha.")
+                          print("[STEP 4 - ERROR] Quá thời gian chờ giải Captcha (hết 5 phút). Không thể Login.")
 
                   except Exception as e:
-                      print(f"[LỖI XẢY RA]: {e}")
+                      print(f"\n[CRITICAL ERROR] Xảy ra lỗi ngoại lệ trong quá trình chạy: {e}")
 
+                  print("[LOG] Đang đóng trình duyệt và kết thúc phiên làm việc.")
                   context.close()
 
           if __name__ == "__main__":
