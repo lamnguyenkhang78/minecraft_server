@@ -93,23 +93,26 @@ jobs:
                       if work_link:
                           print(f"[STEP 2] Navigating to URL: {work_link}")
                           page.goto(work_link, wait_until="domcontentloaded")
-                          time.sleep(3)
+                          time.sleep(5) # Cho phép trang web render đầy đủ các thành phần JavaScript
                           print("[STEP 2 - SUCCESS] Successfully loaded login page!")
                       else:
                           print("[STEP 2 - ERROR] Missing 'MY_WORK_LINK' variable!")
 
-                      # STEP 3: Fill Credentials with proper wait and precise selectors
+                      # STEP 3: Fill Credentials with increased timeout and robust selectors
                       print("\n--------------------------------------------------")
                       print("[STEP 3] Entering Email and Password...")
                       print("--------------------------------------------------")
                       
-                      # Wait for email input to be fully ready
-                      page.wait_for_selector("input[name='email']", timeout=15000)
+                      # Đợi ô email xuất hiện (tăng timeout lên 30 giây)
+                      email_selector = "input[name='email'], input[placeholder='Email']"
+                      page.wait_for_selector(email_selector, timeout=30000)
+                      
                       print(f"[STEP 3] Entering Email: {work_mail}")
-                      page.fill("input[name='email']", work_mail)
+                      page.fill(email_selector, work_mail)
                       
                       print("[STEP 3] Entering Password...")
-                      page.fill("input[name='password']", work_password)
+                      password_selector = "input[name='password'], input[placeholder='Password']"
+                      page.fill(password_selector, work_password)
                       print("[STEP 3 - SUCCESS] Credentials filled successfully!")
 
                       # STEP 4: Wait for reCAPTCHA
