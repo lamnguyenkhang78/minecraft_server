@@ -93,20 +93,26 @@ jobs:
                       if work_link:
                           print(f"[STEP 2] Navigating to URL: {work_link}")
                           page.goto(work_link, wait_until="domcontentloaded")
-                          time.sleep(5) # Cho phép trang web render đầy đủ các thành phần JavaScript
+                          time.sleep(8) 
+                          print(f"[STEP 2] Actual URL after load: {page.url}")
                           print("[STEP 2 - SUCCESS] Successfully loaded login page!")
                       else:
                           print("[STEP 2 - ERROR] Missing 'MY_WORK_LINK' variable!")
 
-                      # STEP 3: Fill Credentials with increased timeout and robust selectors
+                      # STEP 3: Fill Credentials
                       print("\n--------------------------------------------------")
                       print("[STEP 3] Entering Email and Password...")
                       print("--------------------------------------------------")
                       
-                      # Đợi ô email xuất hiện (tăng timeout lên 30 giây)
                       email_selector = "input[name='email'], input[placeholder='Email']"
-                      page.wait_for_selector(email_selector, timeout=30000)
                       
+                      try:
+                          page.wait_for_selector(email_selector, timeout=15000)
+                      except Exception as timeout_err:
+                          print("[DEBUG] Timeout waiting for email input. Printing page HTML content for diagnosis:")
+                          print(page.content()[:2000]) # In ra 2000 ký tự đầu tiên của trang web hiện tại
+                          raise timeout_err
+
                       print(f"[STEP 3] Entering Email: {work_mail}")
                       page.fill(email_selector, work_mail)
                       
@@ -153,7 +159,6 @@ jobs:
                               loop_count += 1
                               page_content = page.content()
                               
-                              # Case 1: START button is available
                               if "START" in page_content and "MINING STARTED" not in page_content:
                                   print(f"[STEP 5 - RESULT] (Loop {loop_count}) START button detected! Clicking...")
                                   try:
@@ -166,21 +171,16 @@ jobs:
                                   print("[FINISH] Process completed. Shutting down runner.")
                                   break
 
-                              # Case 2: Clock is running (MINING STARTED)
                               elif "MINING STARTED" in page_content:
                                   try:
                                       clock_elem = page.locator("text=MINING STARTED").locator("..").locator("div").last
                                       time_str = clock_elem.inner_text().strip()
-                                      
                                       parts = time_str.split(":")
                                       if len(parts) == 3:
                                           hours = int(parts[0])
                                           minutes = int(parts[1])
                                           seconds = int(parts[2])
-                                          
                                           print(f"[STEP 5 - CHECK] (Loop {loop_count}) Current remaining time: {hours}h {minutes}m {seconds}s")
-
-                                          # If > 3 hours -> Shutdown immediately
                                           if hours >= 3:
                                               print(f"[STEP 5 - ACTION] Remaining time >= 3 hours ({hours}h). Shutting down as requested!")
                                               break
