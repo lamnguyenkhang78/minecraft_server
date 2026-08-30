@@ -1,4 +1,4 @@
-name: VPS
+name: my work
 on: [push, workflow_dispatch]
 
 jobs:
