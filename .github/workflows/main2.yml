@@ -86,33 +86,52 @@ jobs:
                       else:
                           print("[STEP 1 - SKIPPED] CHROME_EXTENSION_LINK is missing!")
 
-                      # STEP 2: Access Login Page
+                      # STEP 2: Access Page
                       print("\n--------------------------------------------------")
-                      print("[STEP 2] Navigating to login page...")
+                      print("[STEP 2] Navigating to target URL...")
                       print("--------------------------------------------------")
                       if work_link:
                           print(f"[STEP 2] Navigating to URL: {work_link}")
-                          page.goto(work_link, wait_until="networkidle") # Đợi trang tải xong toàn bộ tài nguyên mạng và JavaScript
+                          page.goto(work_link, wait_until="networkidle")
+                          time.sleep(3)
                           print(f"[STEP 2] Actual URL after load: {page.url}")
-                          print("[STEP 2 - SUCCESS] Successfully loaded login page!")
+                          print("[STEP 2 - SUCCESS] Successfully loaded page!")
                       else:
                           print("[STEP 2 - ERROR] Missing 'MY_WORK_LINK' variable!")
 
-                      # STEP 3: Fill Credentials
+                      # STEP 3: Click Login/Sign In button if present, then fill credentials
                       print("\n--------------------------------------------------")
                       print("[STEP 3] Entering Email and Password...")
                       print("--------------------------------------------------")
                       
-                      # Đợi form đăng nhập xuất hiện hẳn trên trang trước khi tìm ô input
-                      print("[STEP 3] Waiting for login form to render...")
-                      page.wait_for_selector("form#signin-form, input[name='email']", timeout=30000)
+                      email_selector = "input[name='email'], input[placeholder='Email']"
                       
-                      email_selector = "input[name='email']"
+                      # Kiểm tra xem ô email đã hiện luôn chưa, nếu chưa thì tìm nút Login/Sign In trên trang chủ để bấm vào trước
+                      try:
+                          page.wait_for_selector(email_selector, timeout=5000)
+                      except:
+                          print("[STEP 3] Email input not immediately visible. Looking for 'Log in' / 'Sign in' button on homepage...")
+                          try:
+                              # Thử bấm các nút đăng nhập thường thấy trên trang chủ
+                              page.get_by_role("button", name=re.compile("Log in|Sign in|Login", re.IGNORECASE)).click(force=True)
+                          except:
+                              try:
+                                  page.locator("text=Log in").first.click(force=True)
+                              except:
+                                  try:
+                                      page.locator("text=Sign in").first.click(force=True)
+                                  except:
+                                      print("[STEP 3] Could not find explicit login button, continuing to wait for email field...")
+                          
+                          # Đợi lại ô email sau khi bấm
+                          time.sleep(2)
+                          page.wait_for_selector(email_selector, timeout=20000)
+
                       print(f"[STEP 3] Entering Email: {work_mail}")
                       page.fill(email_selector, work_mail)
                       
                       print("[STEP 3] Entering Password...")
-                      password_selector = "input[name='password']"
+                      password_selector = "input[name='password'], input[placeholder='Password']"
                       page.fill(password_selector, work_password)
                       print("[STEP 3 - SUCCESS] Credentials filled successfully!")
 
