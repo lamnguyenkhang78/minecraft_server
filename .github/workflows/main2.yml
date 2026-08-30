@@ -30,6 +30,7 @@ jobs:
           import os
           import shutil
           import sys
+          import re
 
           sys.stdout.reconfigure(encoding='utf-8')
           from playwright.sync_api import sync_playwright
@@ -99,20 +100,18 @@ jobs:
                       else:
                           print("[STEP 2 - ERROR] Missing 'MY_WORK_LINK' variable!")
 
-                      # STEP 3: Click Login/Sign In button if present, then fill credentials
+                      # STEP 3: Fill Credentials
                       print("\n--------------------------------------------------")
                       print("[STEP 3] Entering Email and Password...")
                       print("--------------------------------------------------")
                       
                       email_selector = "input[name='email'], input[placeholder='Email']"
                       
-                      # Kiểm tra xem ô email đã hiện luôn chưa, nếu chưa thì tìm nút Login/Sign In trên trang chủ để bấm vào trước
                       try:
                           page.wait_for_selector(email_selector, timeout=5000)
                       except:
                           print("[STEP 3] Email input not immediately visible. Looking for 'Log in' / 'Sign in' button on homepage...")
                           try:
-                              # Thử bấm các nút đăng nhập thường thấy trên trang chủ
                               page.get_by_role("button", name=re.compile("Log in|Sign in|Login", re.IGNORECASE)).click(force=True)
                           except:
                               try:
@@ -121,9 +120,8 @@ jobs:
                                   try:
                                       page.locator("text=Sign in").first.click(force=True)
                                   except:
-                                      print("[STEP 3] Could not find explicit login button, continuing to wait for email field...")
+                                      print("[STEP 3] Could not find explicit login button, continuing...")
                           
-                          # Đợi lại ô email sau khi bấm
                           time.sleep(2)
                           page.wait_for_selector(email_selector, timeout=20000)
 
@@ -135,30 +133,44 @@ jobs:
                       page.fill(password_selector, work_password)
                       print("[STEP 3 - SUCCESS] Credentials filled successfully!")
 
-                      # STEP 4: Wait for reCAPTCHA
+                      # STEP 4: Trigger and Wait for reCAPTCHA (Áp dụng chuẩn từ code mẫu)
                       print("\n--------------------------------------------------")
-                      print("[STEP 4] Waiting for reCAPTCHA verification...")
+                      print("[STEP 4] Triggering and Waiting for reCAPTCHA...")
                       print("--------------------------------------------------")
-                      success_captcha = False
-                      for i in range(1, 376):
+                      
+                      print("[LOG] Đang click vào khung reCAPTCHA để Extension bắt đầu giải...")
+                      try:
+                          page.frame_locator("iframe[title*='reCAPTCHA']").locator("#recaptcha-anchor").click(force=True)
+                      except:
                           try:
-                              checked = page.frame_locator("iframe[title*='reCAPTCHA']").locator("#recaptcha-anchor").get_attribute("aria-checked")
-                              if checked == "true":
+                              page.locator("iframe[title*='reCAPTCHA']").first.click(force=True)
+                          except Exception as ex:
+                              print(f"[WARNING] Không click được vào anchor reCAPTCHA: {ex}")
+
+                      # Chờ tích xanh tối đa khoảng 3 phút (225 lần x 0.8s)
+                      da_xong = False
+                      for i in range(1, 226):
+                          try:
+                              if page.frame_locator("iframe[title*='reCAPTCHA']").locator("#recaptcha-anchor").get_attribute("aria-checked") == "true":
                                   print(f"[STEP 4 - SUCCESS] reCAPTCHA passed (green check) at attempt {i}!")
-                                  success_captcha = True
+                                  da_xong = True
                                   break
                           except:
                               pass
                           if i % 10 == 0:
-                              print(f"[STEP 4 - WAITING] Waiting for reCAPTCHA... ({i}/375 checks)")
+                              print(f"[STEP 4 - WAITING] Đang chờ tích xanh reCAPTCHA... ({i}/225)")
                           time.sleep(0.8)
 
-                      if success_captcha:
-                          print("[STEP 4 - SUCCESS] Clicking Login button...")
+                      if da_xong:
+                          print("[STEP 4 - SUCCESS] Captcha đã giải xong, tiến hành bấm Login...")
+                          time.sleep(1)
                           try:
-                              page.get_by_role("button", name="Log in").click(force=True)
+                              page.get_by_role("button", name=re.compile("Log in|Sign in|Login", re.IGNORECASE)).click(force=True)
                           except:
-                              page.locator("text=Log in").first.click(force=True)
+                              try:
+                                  page.locator("text=Log in").first.click(force=True)
+                              except:
+                                  page.locator("button[type='submit']").click(force=True)
                           
                           print("[STEP 4] Login clicked. Waiting 5 seconds for dashboard to load...")
                           time.sleep(5)
@@ -207,7 +219,7 @@ jobs:
 
                               time.sleep(5)
                       else:
-                          print("[STEP 4 - ERROR] reCAPTCHA timeout (exceeded 5 minutes). Login aborted.")
+                          print("[STEP 4 - ERROR] reCAPTCHA timeout (exceeded 3 phút). Extension không giải kịp hoặc không tìm thấy captcha.")
 
                   except Exception as e:
                       print(f"\n[CRITICAL ERROR] An exception occurred during execution: {e}")
