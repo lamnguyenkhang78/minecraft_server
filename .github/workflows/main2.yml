@@ -93,19 +93,23 @@ jobs:
                       if work_link:
                           print(f"[STEP 2] Navigating to URL: {work_link}")
                           page.goto(work_link, wait_until="domcontentloaded")
-                          time.sleep(2)
+                          time.sleep(3)
                           print("[STEP 2 - SUCCESS] Successfully loaded login page!")
                       else:
                           print("[STEP 2 - ERROR] Missing 'MY_WORK_LINK' variable!")
 
-                      # STEP 3: Fill Credentials
+                      # STEP 3: Fill Credentials with proper wait and precise selectors
                       print("\n--------------------------------------------------")
                       print("[STEP 3] Entering Email and Password...")
                       print("--------------------------------------------------")
+                      
+                      # Wait for email input to be fully ready
+                      page.wait_for_selector("input[name='email']", timeout=15000)
                       print(f"[STEP 3] Entering Email: {work_mail}")
-                      page.fill("input[placeholder='Email']", work_mail)
+                      page.fill("input[name='email']", work_mail)
+                      
                       print("[STEP 3] Entering Password...")
-                      page.fill("input[placeholder='Password']", work_password)
+                      page.fill("input[name='password']", work_password)
                       print("[STEP 3 - SUCCESS] Credentials filled successfully!")
 
                       # STEP 4: Wait for reCAPTCHA
