@@ -1,10 +1,9 @@
-name: VPS
+name: my_work
 
 on:
   push:
   workflow_dispatch:
   schedule:
-    # Chạy tự động mỗi 6 tiếng, bắt đầu từ 6h sáng giờ Việt Nam (23:00, 05:00, 11:00, 17:00 UTC)
     - cron: '23 5,11,17 * * *'
     - cron: '23 23 * * *'
 
@@ -46,7 +45,7 @@ jobs:
               work_password = os.environ.get("MY_WORK_PASSWORD", "")
 
               print(f"[CONFIG] Extension Link: {extension_url}")
-              print(f"[CONFIG] Work Link: {work_link}")
+              print(f"[CONFIG] Work Link (MY_WORK_LINK): {work_link}")
               print(f"[CONFIG] Mail Account: {work_mail}")
 
               with sync_playwright() as p:
@@ -97,7 +96,7 @@ jobs:
                           time.sleep(2)
                           print("[STEP 2 - SUCCESS] Successfully loaded login page!")
                       else:
-                          print("[STEP 2 - ERROR] Missing MY_WORK_LINK variable!")
+                          print("[STEP 2 - ERROR] Missing 'MY_WORK_LINK' variable!")
 
                       # STEP 3: Fill Credentials
                       print("\n--------------------------------------------------")
