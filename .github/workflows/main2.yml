@@ -92,8 +92,7 @@ jobs:
                       print("--------------------------------------------------")
                       if work_link:
                           print(f"[STEP 2] Navigating to URL: {work_link}")
-                          page.goto(work_link, wait_until="domcontentloaded")
-                          time.sleep(8) 
+                          page.goto(work_link, wait_until="networkidle") # Đợi trang tải xong toàn bộ tài nguyên mạng và JavaScript
                           print(f"[STEP 2] Actual URL after load: {page.url}")
                           print("[STEP 2 - SUCCESS] Successfully loaded login page!")
                       else:
@@ -104,20 +103,16 @@ jobs:
                       print("[STEP 3] Entering Email and Password...")
                       print("--------------------------------------------------")
                       
-                      email_selector = "input[name='email'], input[placeholder='Email']"
+                      # Đợi form đăng nhập xuất hiện hẳn trên trang trước khi tìm ô input
+                      print("[STEP 3] Waiting for login form to render...")
+                      page.wait_for_selector("form#signin-form, input[name='email']", timeout=30000)
                       
-                      try:
-                          page.wait_for_selector(email_selector, timeout=15000)
-                      except Exception as timeout_err:
-                          print("[DEBUG] Timeout waiting for email input. Printing page HTML content for diagnosis:")
-                          print(page.content()[:2000]) # In ra 2000 ký tự đầu tiên của trang web hiện tại
-                          raise timeout_err
-
+                      email_selector = "input[name='email']"
                       print(f"[STEP 3] Entering Email: {work_mail}")
                       page.fill(email_selector, work_mail)
                       
                       print("[STEP 3] Entering Password...")
-                      password_selector = "input[name='password'], input[placeholder='Password']"
+                      password_selector = "input[name='password']"
                       page.fill(password_selector, work_password)
                       print("[STEP 3 - SUCCESS] Credentials filled successfully!")
 
