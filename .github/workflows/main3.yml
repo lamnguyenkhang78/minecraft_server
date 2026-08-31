@@ -1,4 +1,21 @@
-- name: keep_alive
+name: VPS_Keep_Alive
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *' # Chạy tự động 1 lần mỗi ngày vào lúc 00:00 UTC
+
+jobs:
+  run-keep-alive:
+    runs-on: windows-latest
+    
+    steps:
+      # Bước 1: Tải code từ repo về máy ảo
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # Bước 2: Tự động ghi nhận hoạt động, đánh số file từ 1 đến 100 rồi dọn dẹp
+      - name: keep_alive
         shell: powershell
         run: |
           git config --global user.name "github-actions[bot]"
@@ -20,7 +37,6 @@
               if ($files.Count -eq 0) {
                   $nextNumber = 1
               } else {
-                  # Lấy số của file cuối cùng cộng thêm 1, nếu lỗi thì tính theo tổng số file + 1
                   $lastFile = $files[-1].BaseName
                   $lastNum = 0
                   if ([int]::TryParse($lastFile, [ref]$lastNum)) {
