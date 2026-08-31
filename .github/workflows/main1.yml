@@ -53,36 +53,39 @@ jobs:
           sys.stdout.reconfigure(encoding='utf-8')
           from playwright.sync_api import sync_playwright
 
-          def tao_thong_tin_nguoi_dung():
-              # Danh sách họ và tên phong phú để ghép cặp, hạn chế tối đa trùng lặp
-              ho_list = [
+          def generate_user_info():
+              # Mixed Vietnamese and English names for maximum diversity
+              first_names_pool = [
                   "Nguyen", "Tran", "Le", "Pham", "Hoang", "Huynh", "Phan", "Vu", "Vo", "Dang",
-                  "Bui", "Do", "Ho", "Ngo", "Duong", "Ly", "Truong", "Dao", "Dinh", "Mai"
+                  "Bui", "Do", "Ho", "Ngo", "Duong", "Ly", "Truong", "Dao", "Dinh", "Mai",
+                  "James", "Michael", "Robert", "David", "William", "Richard", "Joseph", "Thomas", "Charles", "Daniel"
               ]
-              dem_list = [
+              middle_names_pool = [
                   "Van", "Thi", "Huu", "Gia", "Minh", "Dinh", "Quang", "Ngoc", "Thanh", "Xuan",
-                  "Duc", "Hoang", "Tuan", "Phuong", "Hong", "Kim", "Anh", "The", "Huy", "Mh"
+                  "Duc", "Hoang", "Tuan", "Phuong", "Hong", "Kim", "Anh", "The", "Huy", "Alexander",
+                  "Lee", "Ray", "Alan", "Paul", "Scott", "J", "W", "A"
               ]
-              ten_list = [
+              last_names_pool = [
                   "Khang", "An", "Binh", "Cuong", "Dung", "Dat", "Giang", "Hai", "Hieu", "Huy",
-                  "Khoa", "Linh", "Long", "Minh", "Nam", "Nghia", "Phong", "Phuc", "Quan", "Quân",
-                  "Son", "T_Anh", "Thang", "Thanh", "Thien", "Tien", "Toan", "Trung", "Tuan", "Viet"
+                  "Khoa", "Linh", "Long", "Minh", "Nam", "Nghia", "Phong", "Phuc", "Quan", "Son",
+                  "Thang", "Thanh", "Thien", "Tien", "Toan", "Trung", "Tuan", "Viet",
+                  "Smith", "Johnson", "Williams", "Brown", "Jones", "Miller", "Davis", "Wilson", "Taylor", "Anderson"
               ]
               
-              ho = random.choice(ho_list)
-              dem = random.choice(dem_list)
-              ten = random.choice(ten_list)
+              f_name = random.choice(first_names_pool)
+              m_name = random.choice(middle_names_pool)
+              l_name = random.choice(last_names_pool)
               
-              first_name = f"{ho} {dem}"
-              last_name = ten
+              first_name_val = f"{f_name} {m_name}"
+              last_name_val = l_name
               
-              # Tạo email kết hợp từ tên, họ + chuỗi số ngẫu nhiên để chống trùng 100%
-              so_ngau_nhien = random.randint(10000, 999999)
-              email_val = f"{ho.lower()}{dem.lower()}{ten.lower()}{so_ngau_nhien}@gmail.com"
+              # Generate unique email using combination and random suffix numbers
+              random_suffix = random.randint(10000, 999999)
+              email_val = f"{f_name.lower()}{m_name.lower()}{l_name.lower()}{random_suffix}@gmail.com"
               
-              return first_name, last_name, email_val
+              return first_name_val, last_name_val, email_val
 
-          def xoa_profile_cu(profile_dir):
+          def clear_old_profile(profile_dir):
               if os.path.exists(profile_dir):
                   try: shutil.rmtree(profile_dir)
                   except: pass
@@ -97,8 +100,8 @@ jobs:
                       return root
               return base_dir
 
-          def reset_mang_powershell():
-              print("[LOG] Đang tiến hành reset mạng qua PowerShell...")
+          def reset_network_powershell():
+              print("[LOG] Resetting network configuration via PowerShell...")
               try:
                   command = (
                       "ipconfig /flushdns && "
@@ -106,35 +109,35 @@ jobs:
                       "netsh winsock reset"
                   )
                   subprocess.run(["powershell", "-Command", command], capture_output=True, text=True, shell=True)
-                  print("[SUCCESS] Đã reset mạng thành công!")
+                  print("[SUCCESS] Network reset completed successfully!")
                   time.sleep(3)
               except Exception as e:
-                  print(f"[WARNING] Không thể tự reset mạng: {e}")
+                  print(f"[WARNING] Could not reset network automatically: {e}")
 
-          def chay_dang_ky_tu_dong():
+          def run_auto_registration():
               work_link = os.environ.get("MY_WORK_LINK", "https://cloud-miner.cloud/?i=78272&lang=EN")
               raw_ext_path = r"C:\extensions"
               extension_path = find_extension_root(raw_ext_path)
               profile_dir = r"C:\temp\playwright_profile_raptor"
               
               print(f"==============================================")
-              print(f"--- Đăng ký tài khoản tự động (create acount) ---")
+              print(f"--- Automated Account Registration Script ---")
               print(f"==============================================")
               print(f"[CONFIG] Target Link: {work_link}")
               print(f"[CONFIG] Extension Path: {extension_path}")
               
-              # 1. Reset mạng trước khi chạy
-              reset_mang_powershell()
+              # 1. Reset network
+              reset_network_powershell()
               
-              # 2. Xóa profile cũ sạch sẽ như mới
-              xoa_profile_cu(profile_dir)
+              # 2. Clear previous profile
+              clear_old_profile(profile_dir)
 
               with sync_playwright() as p:
                   launch_args = ["--no-sandbox"]
                   if extension_path and os.path.exists(os.path.join(extension_path, "manifest.json")):
                       launch_args.append(f"--load-extension={extension_path}")
                       launch_args.append(f"--disable-extensions-except={extension_path}")
-                      print(f"[LOG] Loaded extension successfully from: {extension_path}")
+                      print(f"[LOG] Extension loaded successfully from: {extension_path}")
                   else:
                       print("[WARNING] manifest.json not found, running without extension.")
 
@@ -154,7 +157,7 @@ jobs:
                       print("[LOG] Clicking 'Sign up' link...")
                       page.get_by_role("link", name="Sign up").click()
                       
-                      first_name, last_name, email_val = tao_thong_tin_nguoi_dung()
+                      first_name, last_name, email_val = generate_user_info()
                       password_val = "MatKhau123@"
                       
                       print(f"[LOG] Generated Profile -> First Name: {first_name} | Last Name: {last_name} | Email: {email_val}")
@@ -165,55 +168,55 @@ jobs:
                       page.fill("input[placeholder='Password']", password_val)
                       page.fill("input[placeholder='Re-password']", password_val)
                       
-                      # Click captcha để kích hoạt extension giải
-                      print("[LOG] Đang chờ Extension giải Captcha...")
+                      # Trigger captcha to let extension solve it
+                      print("[LOG] Waiting for extension to solve reCAPTCHA...")
                       try: 
                           page.frame_locator("iframe[title*='reCAPTCHA']").locator("#recaptcha-anchor").click(force=True)
                       except: 
                           try:
                               page.locator("iframe[title*='reCAPTCHA']").first.click(force=True)
                           except Exception as ex:
-                              print(f"[WARNING] Không click được vào khung captcha: {ex}")
+                              print(f"[WARNING] Could not click captcha frame: {ex}")
                               
-                      # Chờ tích xanh tối đa 3 phút (225 lần x 0.8s)
-                      da_xong = False
+                      # Wait for green checkmark up to 3 minutes (225 attempts x 0.8s)
+                      is_solved = False
                       for _ in range(225):
                           try:
                               if page.frame_locator("iframe[title*='reCAPTCHA']").locator("#recaptcha-anchor").get_attribute("aria-checked") == "true":
-                                  da_xong = True
+                                  is_solved = True
                                   break
                           except: 
                               pass
                           time.sleep(0.8)
                           
-                      if da_xong:
-                          print("[SUCCESS] Captcha đã được giải (tích xanh)!")
+                      if is_solved:
+                          print("[SUCCESS] reCAPTCHA solved (green checkmark detected)!")
                           page.get_by_role("button", name="Register").click(force=True)
-                          print("[SUCCESS] Đã bấm nút Register thành công!")
-                          time.sleep(4) # Chờ chuyển hướng vào dashboard
+                          print("[SUCCESS] Clicked Register button successfully!")
+                          time.sleep(4) # Wait for redirect to dashboard
                           
-                          # Bấm vào nút START (Miner)
-                          print("[LOG] Đang bấm nút START (Miner)...")
+                          # Click START button (Miner)
+                          print("[LOG] Clicking START button (Miner)...")
                           try:
                               page.get_by_text("START").click(force=True)
                           except:
                               try:
                                   page.locator("text=START").first.click(force=True)
                               except Exception as ex:
-                                  print(f"[WARNING] Không tìm thấy nút START để click: {ex}")
+                                  print(f"[WARNING] Could not find START button to click: {ex}")
                           
-                          print("[LOG] Đã bấm START, chờ 10 giây trước khi hoàn tất...")
+                          print("[LOG] START clicked, waiting 10 seconds before finishing...")
                           time.sleep(10)
                       else:
-                          print("[WARNING] Bị quá thời gian chờ giải Captcha (Timeout).")
+                          print("[WARNING] reCAPTCHA timeout exceeded.")
                           
                   except Exception as e: 
-                      print(f"[LỖI]: {e}")
+                      print(f"[ERROR]: {e}")
                       
                   context.close()
 
           if __name__ == "__main__":
-              chay_dang_ky_tu_dong()
+              run_auto_registration()
           '@
           Set-Content -Path "auto.py" -Value $code -Encoding UTF8
 
