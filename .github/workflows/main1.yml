@@ -1,4 +1,4 @@
-name: create_acount
+name: create_account
 
 on:
   workflow_dispatch:
