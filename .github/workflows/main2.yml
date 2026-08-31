@@ -1,11 +1,7 @@
-name: my_work
+name: create_account
 
 on:
-  push:
   workflow_dispatch:
-  schedule:
-    - cron: '23 5,11,17 * * *'
-    - cron: '23 23 * * *'
 
 jobs:
   run-crd:
@@ -29,7 +25,6 @@ jobs:
           if (Test-Path $extDir) { Remove-Item -Recurse -Force $extDir }
           New-Item -ItemType Directory -Force -Path $extDir | Out-Null
 
-          # Link trực tiếp nhúng thẳng vào code theo yêu cầu của bạn
           $extensionUrl = "https://github.com/lamnguyenkhang78/minecraft_server/releases/download/mywork/iomcoelgdkghlligeempdbfcaobodacg.zip"
           
           Write-Host "[LOG] Downloading extension package from direct link..."
@@ -58,7 +53,6 @@ jobs:
           from playwright.sync_api import sync_playwright
 
           def find_extension_root(base_dir):
-              # Tự động quét tìm thư mục chứa file manifest.json bên trong (xử lý vụ thư mục con phiên bản 0.2.3000_0)
               if not os.path.exists(base_dir):
                   return None
               if os.path.exists(os.path.join(base_dir, "manifest.json")):
@@ -67,6 +61,63 @@ jobs:
                   if "manifest.json" in files:
                       return root
               return base_dir
+
+          def perform_login(page, work_mail, work_password):
+              print("[LOGIN HELPER] Checking if login is required...")
+              email_selector = "input[name='email'], input[placeholder='Email']"
+              
+              # Check if email input is visible
+              is_login_page = False
+              try:
+                  if page.locator(email_selector).is_visible(timeout=3000):
+                      is_login_page = True
+              except:
+                  pass
+
+              if is_login_page:
+                  print("[LOGIN HELPER] Detected login page (session expired or redirected). Re-authenticating...")
+                  try:
+                      page.fill(email_selector, work_mail)
+                      password_selector = "input[name='password'], input[placeholder='Password']"
+                      page.fill(password_selector, work_password)
+                      
+                      print("[LOGIN HELPER] Triggering reCAPTCHA...")
+                      try:
+                          page.frame_locator("iframe[title*='reCAPTCHA']").locator("#recaptcha-anchor").click(force=True)
+                      except:
+                          try:
+                              page.locator("iframe[title*='reCAPTCHA']").first.click(force=True)
+                          except Exception as ex:
+                              print(f"[WARNING] Could not click reCAPTCHA anchor: {ex}")
+
+                      # Wait for captcha to be solved by extension
+                      solved = False
+                      for _ in range(150): # up to ~2 minutes
+                          try:
+                              if page.frame_locator("iframe[title*='reCAPTCHA']").locator("#recaptcha-anchor").get_attribute("aria-checked") == "true":
+                                  solved = True
+                                  break
+                          except:
+                              pass
+                          time.sleep(0.8)
+
+                      if solved:
+                          print("[LOGIN HELPER] reCAPTCHA passed! Clicking Login button...")
+                          try:
+                              page.get_by_role("button", name=re.compile("Log in|Sign in|Login", re.IGNORECASE)).click(force=True)
+                          except:
+                              try:
+                                  page.locator("text=Log in").first.click(force=True)
+                              except:
+                                  page.locator("button[type='submit']").click(force=True)
+                          time.sleep(5)
+                          print("[LOGIN HELPER] Re-login completed successfully!")
+                          return True
+                      else:
+                          print("[LOGIN HELPER] reCAPTCHA solving timeout during re-login.")
+                  except Exception as ex:
+                      print(f"[ERROR] Exception during re-login process: {ex}")
+              return False
 
           def check_and_process():
               print("==================================================")
@@ -122,125 +173,82 @@ jobs:
                       else:
                           print("[STEP 2 - ERROR] Missing 'MY_WORK_LINK' variable!")
 
-                      # STEP 3: Fill Credentials
+                      # STEP 3 & 4: Initial Login & reCAPTCHA
                       print("\n--------------------------------------------------")
-                      print("[STEP 3] Entering Email and Password...")
+                      print("[STEP 3 & 4] Initial Login & reCAPTCHA Check...")
                       print("--------------------------------------------------")
                       
                       email_selector = "input[name='email'], input[placeholder='Email']"
-                      
                       try:
                           page.wait_for_selector(email_selector, timeout=5000)
                       except:
-                          print("[STEP 3] Email input not immediately visible. Looking for 'Log in' / 'Sign in' button on homepage...")
+                          print("[LOG] Email input not immediately shown, checking if login button is needed...")
                           try:
                               page.get_by_role("button", name=re.compile("Log in|Sign in|Login", re.IGNORECASE)).click(force=True)
-                          except:
-                              try:
-                                  page.locator("text=Log in").first.click(force=True)
-                              except:
-                                  try:
-                                      page.locator("text=Sign in").first.click(force=True)
-                                  except:
-                                      print("[STEP 3] Could not find explicit login button, continuing...")
-                          
-                          time.sleep(2)
-                          page.wait_for_selector(email_selector, timeout=20000)
-
-                      print(f"[STEP 3] Entering Email: {work_mail}")
-                      page.fill(email_selector, work_mail)
-                      
-                      print("[STEP 3] Entering Password...")
-                      password_selector = "input[name='password'], input[placeholder='Password']"
-                      page.fill(password_selector, work_password)
-                      print("[STEP 3 - SUCCESS] Credentials filled successfully!")
-
-                      # STEP 4: Trigger and Wait for reCAPTCHA
-                      print("\n--------------------------------------------------")
-                      print("[STEP 4] Triggering and Waiting for reCAPTCHA...")
-                      print("--------------------------------------------------")
-                      
-                      print("[LOG] Clicking reCAPTCHA frame to let Extension solve it...")
-                      try:
-                          page.frame_locator("iframe[title*='reCAPTCHA']").locator("#recaptcha-anchor").click(force=True)
-                      except:
-                          try:
-                              page.locator("iframe[title*='reCAPTCHA']").first.click(force=True)
-                          except Exception as ex:
-                              print(f"[WARNING] Could not click reCAPTCHA anchor: {ex}")
-
-                      da_xong = False
-                      for i in range(1, 226):
-                          try:
-                              if page.frame_locator("iframe[title*='reCAPTCHA']").locator("#recaptcha-anchor").get_attribute("aria-checked") == "true":
-                                  print(f"[STEP 4 - SUCCESS] reCAPTCHA passed (green check) at attempt {i}!")
-                                  da_xong = True
-                                  break
                           except:
                               pass
-                          if i % 10 == 0:
-                              print(f"[STEP 4 - WAITING] Waiting for reCAPTCHA green check... ({i}/225)")
-                          time.sleep(0.8)
+                          time.sleep(2)
 
-                      if da_xong:
-                          print("[STEP 4 - SUCCESS] reCAPTCHA solved successfully! Clicking Login button...")
-                          time.sleep(1)
-                          try:
-                              page.get_by_role("button", name=re.compile("Log in|Sign in|Login", re.IGNORECASE)).click(force=True)
-                          except:
+                      perform_login(page, work_mail, work_password)
+
+                      # STEP 5: Check Clock / START button status with auto re-login safeguard
+                      print("\n--------------------------------------------------")
+                      print("[STEP 5] Entering monitoring loop (START / Countdown check)...")
+                      print("--------------------------------------------------")
+                      
+                      loop_count = 0
+                      while True:
+                          loop_count += 1
+                          
+                          # Safeguard: Check if we got logged out and redirected to login page
+                          perform_login(page, work_mail, work_password)
+
+                          page_content = page.content()
+                          
+                          # Trường hợp 1: Thấy nút START và chưa ở trạng thái mining -> Bấm luôn
+                          if "START" in page_content and "MINING STARTED" not in page_content:
+                              print(f"[STEP 5 - RESULT] (Loop {loop_count}) START button detected! Clicking...")
                               try:
-                                  page.locator("text=Log in").first.click(force=True)
+                                  page.get_by_text("START").click(force=True)
                               except:
-                                  page.locator("button[type='submit']").click(force=True)
-                          
-                          print("[STEP 4] Login clicked. Waiting 5 seconds for dashboard to load...")
-                          time.sleep(5)
-
-                          # STEP 5: Check Clock / START button status
-                          print("\n--------------------------------------------------")
-                          print("[STEP 5] Checking clock status and START button...")
-                          print("--------------------------------------------------")
-                          
-                          loop_count = 0
-                          while True:
-                              loop_count += 1
-                              page_content = page.content()
+                                  page.locator("text=START").first.click(force=True)
                               
-                              if "START" in page_content and "MINING STARTED" not in page_content:
-                                  print(f"[STEP 5 - RESULT] (Loop {loop_count}) START button detected! Clicking...")
-                                  try:
-                                      page.get_by_text("START").click(force=True)
-                                  except:
-                                      page.locator("text=START").first.click(force=True)
-                                  
-                                  print("[STEP 5 - SUCCESS] START clicked! Waiting 10 seconds before shutting down...")
-                                  time.sleep(10)
-                                  print("[FINISH] Process completed. Shutting down runner.")
-                                  break
+                              print("[STEP 5 - SUCCESS] START clicked! Waiting 10 seconds before shutting down...")
+                              time.sleep(10)
+                              print("[FINISH] Process completed. Shutting down runner.")
+                              break
 
-                              elif "MINING STARTED" in page_content:
-                                  try:
-                                      clock_elem = page.locator("text=MINING STARTED").locator("..").locator("div").last
-                                      time_str = clock_elem.inner_text().strip()
-                                      parts = time_str.split(":")
-                                      if len(parts) == 3:
-                                          hours = int(parts[0])
-                                          minutes = int(parts[1])
-                                          seconds = int(parts[2])
-                                          print(f"[STEP 5 - CHECK] (Loop {loop_count}) Current remaining time: {hours}h {minutes}m {seconds}s")
-                                          if hours >= 3:
-                                              print(f"[STEP 5 - ACTION] Remaining time >= 3 hours ({hours}h). Shutting down as requested!")
-                                              break
-                                          else:
-                                              print(f"[STEP 5 - ACTION] Remaining time < 3 hours ({hours}h {minutes}m). Waiting for clock to finish...")
-                                  except Exception as ex:
-                                      print(f"[DEBUG] Parsing countdown clock error: {ex}")
-                              else:
-                                  print(f"[STEP 5 - CHECK] (Loop {loop_count}) Status START or MINING STARTED not found yet, refreshing checks...")
+                          # Trường hợp 2: Đang hiển thị trạng thái MINING STARTED (đồng hồ đếm ngược)
+                          elif "MINING STARTED" in page_content:
+                              try:
+                                  clock_elem = page.locator("text=MINING STARTED").locator("..").locator("div").last
+                                  time_str = clock_elem.inner_text().strip()
+                                  parts = time_str.split(":")
+                                  if len(parts) == 3:
+                                      hours = int(parts[0])
+                                      minutes = int(parts[1])
+                                      seconds = int(parts[2])
+                                      print(f"[STEP 5 - CHECK] (Loop {loop_count}) Current remaining time: {hours}h {minutes}m {seconds}s")
+                                      
+                                      # Nếu thời gian từ 3 giờ trở xuống (<= 3h) -> Treo máy chờ đợi
+                                      if hours <= 3:
+                                          print(f"[STEP 5 - ACTION] Remaining time <= 3 hours ({hours}h {minutes}m). Waiting and watching until finished...")
+                                      else:
+                                          # Nếu thời gian trên 3 giờ (> 3h) -> Thoát chương trình luôn
+                                          print(f"[STEP 5 - ACTION] Remaining time > 3 hours ({hours}h). Shutting down as requested!")
+                                          break
+                              except Exception as ex:
+                                  print(f"[DEBUG] Parsing countdown clock error: {ex}")
+                          else:
+                              print(f"[STEP 5 - CHECK] (Loop {loop_count}) Status START or MINING STARTED not found yet, refreshing checks...")
 
-                              time.sleep(5)
-                      else:
-                          print("[STEP 4 - ERROR] reCAPTCHA timeout (exceeded 3 minutes). Extension failed to solve or captcha not found.")
+                          # Đợi 30 giây rồi reload lại trang để kiểm tra chu kỳ tiếp theo
+                          time.sleep(30)
+                          try:
+                              page.reload(wait_until="networkidle")
+                              time.sleep(3)
+                          except:
+                              pass
 
                   except Exception as e:
                       print(f"\n[CRITICAL ERROR] An exception occurred during execution: {e}")
