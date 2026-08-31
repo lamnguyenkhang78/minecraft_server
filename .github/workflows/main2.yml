@@ -1,12 +1,11 @@
 name: my_work
 
 on:
-  push:
   workflow_dispatch:
   schedule:
     - cron: '23 5,11,17 * * *'
     - cron: '23 23 * * *'
-
+    
 jobs:
   run-crd:
     runs-on: windows-latest
