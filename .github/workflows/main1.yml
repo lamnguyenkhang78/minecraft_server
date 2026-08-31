@@ -1,0 +1,224 @@
+name: create_acount
+
+on:
+  workflow_dispatch:
+
+jobs:
+  run-crd:
+    runs-on: windows-latest
+    steps:
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        shell: powershell
+        run: |
+          pip install playwright
+          playwright install chromium
+
+      - name: Prepare Extension
+        shell: powershell
+        run: |
+          $extDir = "C:\extensions"
+          if (Test-Path $extDir) { Remove-Item -Recurse -Force $extDir }
+          New-Item -ItemType Directory -Force -Path $extDir | Out-Null
+
+          $extensionUrl = "https://github.com/lamnguyenkhang78/minecraft_server/releases/download/mywork/iomcoelgdkghlligeempdbfcaobodacg.zip"
+          
+          Write-Host "[LOG] Downloading extension package from direct link..."
+          $zipPath = "$extDir\extension.zip"
+          try {
+              Invoke-WebRequest -Uri $extensionUrl -OutFile $zipPath
+              Write-Host "[LOG] Extracting extension archive..."
+              Expand-Archive -Path $zipPath -DestinationPath $extDir -Force
+              Remove-Item $zipPath -Force
+              Write-Host "[SUCCESS] Extension downloaded and extracted!"
+          } catch {
+              Write-Host "[ERROR] Failed to download extension: $_"
+          }
+
+      - name: create file
+        shell: powershell
+        run: |
+          $code = @'
+          import time
+          import random
+          import os
+          import shutil
+          import sys
+          import subprocess
+
+          sys.stdout.reconfigure(encoding='utf-8')
+          from playwright.sync_api import sync_playwright
+
+          def tao_thong_tin_nguoi_dung():
+              # Danh sách họ và tên phong phú để ghép cặp, hạn chế tối đa trùng lặp
+              ho_list = [
+                  "Nguyen", "Tran", "Le", "Pham", "Hoang", "Huynh", "Phan", "Vu", "Vo", "Dang",
+                  "Bui", "Do", "Ho", "Ngo", "Duong", "Ly", "Truong", "Dao", "Dinh", "Mai"
+              ]
+              dem_list = [
+                  "Van", "Thi", "Huu", "Gia", "Minh", "Dinh", "Quang", "Ngoc", "Thanh", "Xuan",
+                  "Duc", "Hoang", "Tuan", "Phuong", "Hong", "Kim", "Anh", "The", "Huy", "Mh"
+              ]
+              ten_list = [
+                  "Khang", "An", "Binh", "Cuong", "Dung", "Dat", "Giang", "Hai", "Hieu", "Huy",
+                  "Khoa", "Linh", "Long", "Minh", "Nam", "Nghia", "Phong", "Phuc", "Quan", "Quân",
+                  "Son", "T_Anh", "Thang", "Thanh", "Thien", "Tien", "Toan", "Trung", "Tuan", "Viet"
+              ]
+              
+              ho = random.choice(ho_list)
+              dem = random.choice(dem_list)
+              ten = random.choice(ten_list)
+              
+              first_name = f"{ho} {dem}"
+              last_name = ten
+              
+              # Tạo email kết hợp từ tên, họ + chuỗi số ngẫu nhiên để chống trùng 100%
+              so_ngau_nhien = random.randint(10000, 999999)
+              email_val = f"{ho.lower()}{dem.lower()}{ten.lower()}{so_ngau_nhien}@gmail.com"
+              
+              return first_name, last_name, email_val
+
+          def xoa_profile_cu(profile_dir):
+              if os.path.exists(profile_dir):
+                  try: shutil.rmtree(profile_dir)
+                  except: pass
+
+          def find_extension_root(base_dir):
+              if not os.path.exists(base_dir):
+                  return None
+              if os.path.exists(os.path.join(base_dir, "manifest.json")):
+                  return base_dir
+              for root, dirs, files in os.walk(base_dir):
+                  if "manifest.json" in files:
+                      return root
+              return base_dir
+
+          def reset_mang_powershell():
+              print("[LOG] Đang tiến hành reset mạng qua PowerShell...")
+              try:
+                  command = (
+                      "ipconfig /flushdns && "
+                      "netsh int ip reset && "
+                      "netsh winsock reset"
+                  )
+                  subprocess.run(["powershell", "-Command", command], capture_output=True, text=True, shell=True)
+                  print("[SUCCESS] Đã reset mạng thành công!")
+                  time.sleep(3)
+              except Exception as e:
+                  print(f"[WARNING] Không thể tự reset mạng: {e}")
+
+          def chay_dang_ky_tu_dong():
+              work_link = os.environ.get("MY_WORK_LINK", "https://cloud-miner.cloud/?i=78272&lang=EN")
+              raw_ext_path = r"C:\extensions"
+              extension_path = find_extension_root(raw_ext_path)
+              profile_dir = r"C:\temp\playwright_profile_raptor"
+              
+              print(f"==============================================")
+              print(f"--- Đăng ký tài khoản tự động (create acount) ---")
+              print(f"==============================================")
+              print(f"[CONFIG] Target Link: {work_link}")
+              print(f"[CONFIG] Extension Path: {extension_path}")
+              
+              # 1. Reset mạng trước khi chạy
+              reset_mang_powershell()
+              
+              # 2. Xóa profile cũ sạch sẽ như mới
+              xoa_profile_cu(profile_dir)
+
+              with sync_playwright() as p:
+                  launch_args = ["--no-sandbox"]
+                  if extension_path and os.path.exists(os.path.join(extension_path, "manifest.json")):
+                      launch_args.append(f"--load-extension={extension_path}")
+                      launch_args.append(f"--disable-extensions-except={extension_path}")
+                      print(f"[LOG] Loaded extension successfully from: {extension_path}")
+                  else:
+                      print("[WARNING] manifest.json not found, running without extension.")
+
+                  context = p.chromium.launch_persistent_context(
+                      user_data_dir=profile_dir,
+                      headless=False,
+                      args=launch_args,
+                      viewport={"width": 1366, "height": 768}
+                  )
+                  page = context.new_page()
+                  
+                  try:
+                      print(f"[LOG] Navigating to URL: {work_link}")
+                      page.goto(work_link, wait_until="domcontentloaded")
+                      time.sleep(2)
+                      
+                      print("[LOG] Clicking 'Sign up' link...")
+                      page.get_by_role("link", name="Sign up").click()
+                      
+                      first_name, last_name, email_val = tao_thong_tin_nguoi_dung()
+                      password_val = "MatKhau123@"
+                      
+                      print(f"[LOG] Generated Profile -> First Name: {first_name} | Last Name: {last_name} | Email: {email_val}")
+                      
+                      page.fill("input[placeholder='First name']", first_name)
+                      page.fill("input[placeholder='Last name']", last_name)
+                      page.fill("input[placeholder='Email']", email_val)
+                      page.fill("input[placeholder='Password']", password_val)
+                      page.fill("input[placeholder='Re-password']", password_val)
+                      
+                      # Click captcha để kích hoạt extension giải
+                      print("[LOG] Đang chờ Extension giải Captcha...")
+                      try: 
+                          page.frame_locator("iframe[title*='reCAPTCHA']").locator("#recaptcha-anchor").click(force=True)
+                      except: 
+                          try:
+                              page.locator("iframe[title*='reCAPTCHA']").first.click(force=True)
+                          except Exception as ex:
+                              print(f"[WARNING] Không click được vào khung captcha: {ex}")
+                              
+                      # Chờ tích xanh tối đa 3 phút (225 lần x 0.8s)
+                      da_xong = False
+                      for _ in range(225):
+                          try:
+                              if page.frame_locator("iframe[title*='reCAPTCHA']").locator("#recaptcha-anchor").get_attribute("aria-checked") == "true":
+                                  da_xong = True
+                                  break
+                          except: 
+                              pass
+                          time.sleep(0.8)
+                          
+                      if da_xong:
+                          print("[SUCCESS] Captcha đã được giải (tích xanh)!")
+                          page.get_by_role("button", name="Register").click(force=True)
+                          print("[SUCCESS] Đã bấm nút Register thành công!")
+                          time.sleep(4) # Chờ chuyển hướng vào dashboard
+                          
+                          # Bấm vào nút START (Miner)
+                          print("[LOG] Đang bấm nút START (Miner)...")
+                          try:
+                              page.get_by_text("START").click(force=True)
+                          except:
+                              try:
+                                  page.locator("text=START").first.click(force=True)
+                              except Exception as ex:
+                                  print(f"[WARNING] Không tìm thấy nút START để click: {ex}")
+                          
+                          print("[LOG] Đã bấm START, chờ 10 giây trước khi hoàn tất...")
+                          time.sleep(10)
+                      else:
+                          print("[WARNING] Bị quá thời gian chờ giải Captcha (Timeout).")
+                          
+                  except Exception as e: 
+                      print(f"[LỖI]: {e}")
+                      
+                  context.close()
+
+          if __name__ == "__main__":
+              chay_dang_ky_tu_dong()
+          '@
+          Set-Content -Path "auto.py" -Value $code -Encoding UTF8
+
+      - name: Run auto.py
+        shell: powershell
+        env:
+          MY_WORK_LINK: ${{ secrets.MY_WORK_LINK }}
+        run: python auto.py
