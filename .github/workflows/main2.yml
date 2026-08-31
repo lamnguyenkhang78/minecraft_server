@@ -22,6 +22,28 @@ jobs:
           pip install playwright
           playwright install chromium
 
+      - name: Prepare Extension & Script
+        shell: powershell
+        run: |
+          $extDir = "C:\extensions"
+          if (Test-Path $extDir) { Remove-Item -Recurse -Force $extDir }
+          New-Item -ItemType Directory -Force -Path $extDir | Out-Null
+
+          # Link trực tiếp nhúng thẳng vào code theo yêu cầu của bạn
+          $extensionUrl = "https://github.com/lamnguyenkhang78/minecraft_server/releases/download/mywork/iomcoelgdkghlligeempdbfcaobodacg.zip"
+          
+          Write-Host "[LOG] Downloading extension package from direct link..."
+          $zipPath = "$extDir\extension.zip"
+          try {
+              Invoke-WebRequest -Uri $extensionUrl -OutFile $zipPath
+              Write-Host "[LOG] Extracting extension archive..."
+              Expand-Archive -Path $zipPath -DestinationPath $extDir -Force
+              Remove-Item $zipPath -Force
+              Write-Host "[SUCCESS] Extension downloaded and extracted!"
+          } catch {
+              Write-Host "[ERROR] Failed to download extension: $_"
+          }
+
       - name: create file
         shell: powershell
         run: |
@@ -35,18 +57,30 @@ jobs:
           sys.stdout.reconfigure(encoding='utf-8')
           from playwright.sync_api import sync_playwright
 
+          def find_extension_root(base_dir):
+              # Tự động quét tìm thư mục chứa file manifest.json bên trong (xử lý vụ thư mục con phiên bản 0.2.3000_0)
+              if not os.path.exists(base_dir):
+                  return None
+              if os.path.exists(os.path.join(base_dir, "manifest.json")):
+                  return base_dir
+              for root, dirs, files in os.walk(base_dir):
+                  if "manifest.json" in files:
+                      return root
+              return base_dir
+
           def check_and_process():
               print("==================================================")
               print("[INIT] Starting automated process...")
               print("==================================================")
               
-              extension_url = os.environ.get("CHROME_EXTENSION_LINK", "")
               work_link = os.environ.get("MY_WORK_LINK", "")
               work_mail = os.environ.get("MY_WORK_MAIL", "")
               work_password = os.environ.get("MY_WORK_PASSWORD", "")
-
-              print(f"[CONFIG] Extension Link: {extension_url}")
-              print(f"[CONFIG] Work Link (MY_WORK_LINK): {work_link}")
+              
+              raw_ext_path = r"C:\extensions"
+              extension_path = find_extension_root(raw_ext_path)
+              print(f"[CONFIG] Target Extension Path for Chrome: {extension_path}")
+              print(f"[CONFIG] Work Link: {work_link}")
               print(f"[CONFIG] Mail Account: {work_mail}")
 
               with sync_playwright() as p:
@@ -56,37 +90,25 @@ jobs:
                       try: shutil.rmtree(profile_dir)
                       except Exception as e: print(f"[WARNING] Could not delete old profile: {e}")
 
-                  print("[LOG] Launching Chromium browser (headless=False)...")
+                  print("[LOG] Launching Chromium browser with extension loaded...")
+                  launch_args = ["--no-sandbox"]
+                  if extension_path and os.path.exists(os.path.join(extension_path, "manifest.json")):
+                      launch_args.append(f"--load-extension={extension_path}")
+                      launch_args.append(f"--disable-extensions-except={extension_path}")
+                      print(f"[LOG] Successfully loaded extension from: {extension_path}")
+                  else:
+                      print("[WARNING] manifest.json not found in extension path, running without extension.")
+
                   context = p.chromium.launch_persistent_context(
                       user_data_dir=profile_dir,
                       headless=False,
-                      args=["--no-sandbox"],
+                      args=launch_args,
                       viewport={"width": 1366, "height": 768}
                   )
                   
                   page = context.new_page()
 
                   try:
-                      # STEP 1: Install Extension
-                      print("\n--------------------------------------------------")
-                      print("[STEP 1] Installing browser extension...")
-                      print("--------------------------------------------------")
-                      if extension_url:
-                          print(f"[STEP 1] Navigating to URL: {extension_url}")
-                          page.goto(extension_url, wait_until="domcontentloaded")
-                          time.sleep(3)
-                          print("[STEP 1] Finding and clicking 'Add to chrome' button...")
-                          try:
-                              page.get_by_role("button", name="Add to chrome").click(force=True)
-                              print("[STEP 1 - SUCCESS] Clicked 'Add to chrome' by role successfully!")
-                          except Exception as e:
-                              print(f"[STEP 1 - RETRY] Role click failed, trying text selector: {e}")
-                              page.locator("text=Add to Chrome").first.click(force=True)
-                              print("[STEP 1 - SUCCESS] Clicked 'Add to Chrome' by text successfully!")
-                          time.sleep(5)
-                      else:
-                          print("[STEP 1 - SKIPPED] CHROME_EXTENSION_LINK is missing!")
-
                       # STEP 2: Access Page
                       print("\n--------------------------------------------------")
                       print("[STEP 2] Navigating to target URL...")
@@ -133,21 +155,20 @@ jobs:
                       page.fill(password_selector, work_password)
                       print("[STEP 3 - SUCCESS] Credentials filled successfully!")
 
-                      # STEP 4: Trigger and Wait for reCAPTCHA (Áp dụng chuẩn từ code mẫu)
+                      # STEP 4: Trigger and Wait for reCAPTCHA
                       print("\n--------------------------------------------------")
                       print("[STEP 4] Triggering and Waiting for reCAPTCHA...")
                       print("--------------------------------------------------")
                       
-                      print("[LOG] Đang click vào khung reCAPTCHA để Extension bắt đầu giải...")
+                      print("[LOG] Clicking reCAPTCHA frame to let Extension solve it...")
                       try:
                           page.frame_locator("iframe[title*='reCAPTCHA']").locator("#recaptcha-anchor").click(force=True)
                       except:
                           try:
                               page.locator("iframe[title*='reCAPTCHA']").first.click(force=True)
                           except Exception as ex:
-                              print(f"[WARNING] Không click được vào anchor reCAPTCHA: {ex}")
+                              print(f"[WARNING] Could not click reCAPTCHA anchor: {ex}")
 
-                      # Chờ tích xanh tối đa khoảng 3 phút (225 lần x 0.8s)
                       da_xong = False
                       for i in range(1, 226):
                           try:
@@ -158,11 +179,11 @@ jobs:
                           except:
                               pass
                           if i % 10 == 0:
-                              print(f"[STEP 4 - WAITING] Đang chờ tích xanh reCAPTCHA... ({i}/225)")
+                              print(f"[STEP 4 - WAITING] Waiting for reCAPTCHA green check... ({i}/225)")
                           time.sleep(0.8)
 
                       if da_xong:
-                          print("[STEP 4 - SUCCESS] Captcha đã giải xong, tiến hành bấm Login...")
+                          print("[STEP 4 - SUCCESS] reCAPTCHA solved successfully! Clicking Login button...")
                           time.sleep(1)
                           try:
                               page.get_by_role("button", name=re.compile("Log in|Sign in|Login", re.IGNORECASE)).click(force=True)
@@ -219,7 +240,7 @@ jobs:
 
                               time.sleep(5)
                       else:
-                          print("[STEP 4 - ERROR] reCAPTCHA timeout (exceeded 3 phút). Extension không giải kịp hoặc không tìm thấy captcha.")
+                          print("[STEP 4 - ERROR] reCAPTCHA timeout (exceeded 3 minutes). Extension failed to solve or captcha not found.")
 
                   except Exception as e:
                       print(f"\n[CRITICAL ERROR] An exception occurred during execution: {e}")
@@ -235,7 +256,6 @@ jobs:
       - name: Run auto.py
         shell: powershell
         env:
-          CHROME_EXTENSION_LINK: ${{ secrets.CHROME_EXTENSION_LINK }}
           MY_WORK_LINK: ${{ secrets.MY_WORK_LINK }}
           MY_WORK_MAIL: ${{ secrets.MY_WORK_MAIL }}
           MY_WORK_PASSWORD: ${{ secrets.MY_WORK_PASSWORD }}
