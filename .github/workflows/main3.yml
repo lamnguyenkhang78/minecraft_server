@@ -1,0 +1,49 @@
+name: VPS
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *' # Chạy tự động 1 lần mỗi ngày (vào lúc 00:00 giờ UTC)
+
+jobs:
+  run-crd:
+    runs-on: windows-latest
+    steps:
+      # ... (Các bước cài đặt CRD, tải file, kết nối VPS giữ nguyên ở đây) ...
+
+      - name: Auto Keep-Alive & Clean Temp Folder (Max 100 files)
+        shell: powershell
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # 1. Tạo thư mục temp nếu chưa có
+          if (!(Test-Path "temp")) {
+              New-Item -ItemType Directory -Force -Path "temp" | Out-Null
+          }
+          
+          # 2. Kiểm tra số lượng file trong thư mục temp
+          $files = Get-ChildItem -Path "temp" -File
+          if ($files.Count -ge 100) {
+              Write-Host "[INFO] Thư mục temp đã có từ 100 file trở lên. Tiến hành dọn dẹp sạch sẽ để nhẹ repo..."
+              Remove-Item -Path "temp/*" -Force
+          }
+          
+          # 3. Tạo file log mới với tên kèm thời gian để mỗi ngày là một file riêng biệt
+          $dateStr = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
+          $fileName = "temp/log_$dateStr.txt"
+          $dateReadable = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+          
+          Set-Content -Path $fileName -Value "Repo active at: $dateReadable"
+          
+          # 4. Đồng bộ hóa thay đổi lên GitHub (Thêm file mới và xóa các file cũ nếu có dọn dẹp)
+          git add -A
+          
+          $status = git status --porcelain
+          if ($status) {
+              git commit -m "chore: daily keep-alive & cleanup temp [$dateReadable]"
+              git push
+              Write-Host "[SUCCESS] Đã cập nhật file mới và giữ repo sạch sẽ!"
+          } else {
+              Write-Host "[INFO] Không có thay đổi mới."
+          }
