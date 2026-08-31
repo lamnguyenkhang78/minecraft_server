@@ -1,7 +1,11 @@
 name: my_work
 
 on:
+  push:
   workflow_dispatch:
+  schedule:
+    - cron: '23 5,11,17 * * *'
+    - cron: '23 23 * * *'
 
 jobs:
   run-crd:
@@ -25,6 +29,7 @@ jobs:
           if (Test-Path $extDir) { Remove-Item -Recurse -Force $extDir }
           New-Item -ItemType Directory -Force -Path $extDir | Out-Null
 
+          # Link trực tiếp nhúng thẳng vào code theo yêu cầu của bạn
           $extensionUrl = "https://github.com/lamnguyenkhang78/minecraft_server/releases/download/mywork/iomcoelgdkghlligeempdbfcaobodacg.zip"
           
           Write-Host "[LOG] Downloading extension package from direct link..."
@@ -53,6 +58,7 @@ jobs:
           from playwright.sync_api import sync_playwright
 
           def find_extension_root(base_dir):
+              # Tự động quét tìm thư mục chứa file manifest.json bên trong (xử lý vụ thư mục con phiên bản)
               if not os.path.exists(base_dir):
                   return None
               if os.path.exists(os.path.join(base_dir, "manifest.json")):
@@ -66,7 +72,6 @@ jobs:
               print("[LOGIN HELPER] Checking if login is required...")
               email_selector = "input[name='email'], input[placeholder='Email']"
               
-              # Check if email input is visible
               is_login_page = False
               try:
                   if page.locator(email_selector).is_visible(timeout=3000):
@@ -90,9 +95,8 @@ jobs:
                           except Exception as ex:
                               print(f"[WARNING] Could not click reCAPTCHA anchor: {ex}")
 
-                      # Wait for captcha to be solved by extension
                       solved = False
-                      for _ in range(150): # up to ~2 minutes
+                      for _ in range(150): # Chờ tối đa ~2 phút giải captcha
                           try:
                               if page.frame_locator("iframe[title*='reCAPTCHA']").locator("#recaptcha-anchor").get_attribute("aria-checked") == "true":
                                   solved = True
@@ -191,7 +195,7 @@ jobs:
 
                       perform_login(page, work_mail, work_password)
 
-                      # STEP 5: Check Clock / START button status with auto re-login safeguard
+                      # STEP 5: Check Clock / START button status with monitoring loop
                       print("\n--------------------------------------------------")
                       print("[STEP 5] Entering monitoring loop (START / Countdown check)...")
                       print("--------------------------------------------------")
@@ -200,7 +204,7 @@ jobs:
                       while True:
                           loop_count += 1
                           
-                          # Safeguard: Check if we got logged out and redirected to login page
+                          # Kiểm tra xem có bị văng ra trang login sau mỗi lần reload/chạy không
                           perform_login(page, work_mail, work_password)
 
                           page_content = page.content()
@@ -230,7 +234,7 @@ jobs:
                                       seconds = int(parts[2])
                                       print(f"[STEP 5 - CHECK] (Loop {loop_count}) Current remaining time: {hours}h {minutes}m {seconds}s")
                                       
-                                      # Nếu thời gian từ 3 giờ trở xuống (<= 3h) -> Treo máy chờ đợi
+                                      # Nếu thời gian từ 3 giờ trở xuống (<= 3h) -> Treo máy chờ đợi cho đến khi hết giờ
                                       if hours <= 3:
                                           print(f"[STEP 5 - ACTION] Remaining time <= 3 hours ({hours}h {minutes}m). Waiting and watching until finished...")
                                       else:
