@@ -1,36 +1,36 @@
-name: VPS_Keep_Alive
+name: Keep_Alive
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 0 * * *' # Chạy tự động 1 lần mỗi ngày vào lúc 00:00 UTC
+    - cron: '0 0 * * *'
 
 jobs:
   run-keep-alive:
     runs-on: windows-latest
     
+    # Cấp quyền đọc và ghi trực tiếp cho job này
+    permissions:
+      contents: write
+
     steps:
-      # Bước 1: Tải code từ repo về máy ảo
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # Bước 2: Tự động ghi nhận hoạt động, đánh số file từ 1 đến 100 rồi dọn dẹp
       - name: keep_alive
         shell: powershell
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # 1. Tạo thư mục temp nếu chưa có
           if (!(Test-Path "temp")) {
               New-Item -ItemType Directory -Force -Path "temp" | Out-Null
           }
           
-          # 2. Đếm số lượng file hiện có trong temp để đánh số thứ tự tiếp theo
           $files = Get-ChildItem -Path "temp" -Filter "*.txt" | Sort-Object { [int]($_.BaseName -replace '\D') }
           
           if ($files.Count -ge 100) {
-              Write-Host "[INFO] Thư mục temp đã đủ 100 file. Đang dọn dẹp sạch sẽ để đếm lại từ đầu..."
+              Write-Host "[INFO] Thư mục temp đã đủ 100 file. Đang dọn dẹp..."
               Remove-Item -Path "temp/*" -Force
               $nextNumber = 1
           } else {
@@ -47,13 +47,11 @@ jobs:
               }
           }
           
-          # 3. Tạo file mới theo thứ tự số (ví dụ: temp/1.txt, temp/2.txt, ...)
           $fileName = "temp/$nextNumber.txt"
           $dateReadable = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
           
           Set-Content -Path $fileName -Value "Keep-alive active at: $dateReadable (File thứ $nextNumber)"
           
-          # 4. Đẩy lên GitHub an toàn
           git add -A
           
           $status = git status --porcelain
