@@ -196,7 +196,6 @@ jobs:
                       
                       time.sleep(5)
                       
-                      # Sử dụng ID chuẩn xác từ HTML: #startButton và #statusText
                       try:
                           start_button = page.locator("#startButton")
                           status_text = page.locator("#statusText")
@@ -205,7 +204,6 @@ jobs:
                               txt = start_button.inner_text().strip()
                               print(f"[INFO] Found startButton with text: '{txt}'")
                               
-                              # Bấm trực tiếp vào nút START chuẩn theo ID
                               start_button.click(force=True)
                               print("[STEP 5 - SUCCESS] Successfully clicked #startButton!")
                               time.sleep(5)
@@ -240,49 +238,3 @@ jobs:
           MY_WORK_MAIL: ${{ secrets.MY_WORK_MAIL }}
           MY_WORK_PASSWORD: ${{ secrets.MY_WORK_PASSWORD }}
         run: python auto.py
-
-      - name: keep_alive
-        shell: powershell
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
-          if (!(Test-Path "temp")) {
-              New-Item -ItemType Directory -Force -Path "temp" | Out-Null
-          }
-          
-          $files = Get-ChildItem -Path "temp" -Filter "*.txt" | Sort-Object { [int]($_.BaseName -replace '\D') }
-          
-          if ($files.Count -ge 100) {
-              Write-Host "[INFO] Thư mục temp đã đủ 100 file. Đang dọn dẹp sạch sẽ để đếm lại từ đầu..."
-              Remove-Item -Path "temp/*" -Force
-              $nextNumber = 1
-          } else {
-              if ($files.Count -eq 0) {
-                  $nextNumber = 1
-              } else {
-                  $lastFile = $files[-1].BaseName
-                  $lastNum = 0
-                  if ([int]::TryParse($lastFile, [ref]$lastNum)) {
-                      $nextNumber = $lastNum + 1
-                  } else {
-                      $nextNumber = $files.Count + 1
-                  }
-              }
-          }
-          
-          $fileName = "temp/$nextNumber.txt"
-          $dateReadable = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-          
-          Set-Content -Path $fileName -Value "Keep-alive active at: $dateReadable (File thứ $nextNumber)"
-          
-          git add -A
-          
-          $status = git status --porcelain
-          if ($status) {
-              git commit -m "chore(keep_alive): update file $nextNumber.txt [$dateReadable]"
-              git push
-              Write-Host "[SUCCESS] Đã tạo file $nextNumber.txt và cập nhật repo thành công!"
-          } else {
-              Write-Host "[INFO] Không có thay đổi mới."
-          }
