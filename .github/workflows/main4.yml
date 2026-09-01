@@ -5,6 +5,11 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      action_note:
+        description: 'Ghi chú tùy chọn cho lần chạy'
+        required: false
+        default: 'Manual trigger'
 
 jobs:
   dummy-activity:
@@ -17,22 +22,57 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Generate Random Activity
+      - name: Process and Manage Temp Files
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Tạo thư mục dummy nếu chưa có
-          mkdir -p .github/dummy
+          # 1. Tạo thư mục temp nếu chưa có
+          mkdir -p temp
           
-          # Tạo một chuỗi ngẫu nhiên hoặc thời gian hiện tại để file luôn thay đổi nội dung
-          RANDOM_STRING=$(date +%s%N | md5sum | head -c 10)
-          CURRENT_TIME=$(date -u +"%Y-%m-%d %H:%M:%S")
+          # 2. Kiểm tra số lượng file hiện tại trong thư mục temp để xử lý logic <= 100 file
+          # Lọc các file có định dạng số (ví dụ: 1.txt, 2.txt...)
+          existing_files=$(find temp -maxdepth 1 -type f -name "*.txt" | wc -l)
+          echo "[INFO] Số lượng file hiện tại trong temp: $existing_files"
           
-          echo "Dummy activity payload: $RANDOM_STRING at $CURRENT_TIME" > .github/dummy/activity.log
+          if [ "$existing_files" -ge 100 ]; then
+              echo "[INFO] Thư mục temp đã đạt tối đa 100 file. Tiến hành xóa sạch để tránh phồng repo..."
+              rm -rf temp/*
+              next_number=1
+          else
+              # Tìm số thứ tự tiếp theo dựa trên tên file lớn nhất hiện có
+              last_file=$(find temp -maxdepth 1 -type f -name "*.txt" | sed 's|temp/||;s|\.txt||' | sort -n | tail -n 1)
+              if [ -z "$last_file" ]; then
+                  next_number=1
+              else
+                  next_number=$((last_file + 1))
+              fi
+          fi
           
-          # Kiểm tra thay đổi và push
-          git add .github/dummy/activity.log
+          # 3. Tạo nội dung log kết quả kiểm tra
+          file_name="temp/$next_number.txt"
+          current_time=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          random_payload=$(date +%s%N | md5sum | head -c 10)
           
-          # Chỉ commit nếu thực sự có thay đổi
-          git diff --staged --quiet || (git commit -m "chore(dummy): automated activity trigger [$CURRENT_TIME]" && git push)
+          echo "==========================================" > "$file_name"
+          echo "Status: SUCCESS" >> "$file_name"
+          echo "File Index: $next_number" >> "$file_name"
+          echo "Payload Check: $random_payload" >> "$file_name"
+          echo "Timestamp: $current_time" >> "$file_name"
+          echo "==========================================" >> "$file_name"
+          
+          echo "[SUCCESS] Đã tạo file mới: $file_name"
+
+      - name: Commit and Push Changes
+        run: |
+          git add temp/
+          
+          # Kiểm tra xem có thực sự có thay đổi để commit hay không
+          if git diff --staged --quiet; then
+              echo "[INFO] Không có thay đổi mới nào để commit."
+          else
+              current_time=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+              git commit -m "chore(temp): update automated log results [$current_time]"
+              git push
+              echo "[SUCCESS] Đã đẩy code mới lên Repository thành công!"
+          fi
