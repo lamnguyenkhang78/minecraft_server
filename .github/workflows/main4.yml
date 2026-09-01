@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       action_note:
-        description: 'Ghi chú tùy chọn cho lần chạy'
+        description: 'Optional note for the run'
         required: false
         default: 'Manual trigger'
 
@@ -27,19 +27,19 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # 1. Tạo thư mục temp ở ngoài thư mục gốc
+          # 1. Create temp directory if it does not exist
           mkdir -p temp
           
-          # 2. Kiểm tra số lượng file hiện tại trong thư mục temp
+          # 2. Check current number of files in the temp directory
           existing_files=$(find temp -maxdepth 1 -type f -name "*.txt" | wc -l)
-          echo "[INFO] Số lượng file hiện tại trong temp: $existing_files"
+          echo "[INFO] Current number of files in temp: $existing_files"
           
           if [ "$existing_files" -ge 100 ]; then
-              echo "[INFO] Thư mục temp đã đạt tối đa 100 file. Tiến hành xóa sạch để tránh phồng repo..."
+              echo "[INFO] Temp directory has reached 100 files. Cleaning up to prevent repo bloat..."
               rm -rf temp/*
               next_number=1
           else
-              # Tìm số thứ tự tiếp theo dựa trên tên file lớn nhất hiện có
+              # Find the next sequence number based on the largest existing filename
               last_file=$(find temp -maxdepth 1 -type f -name "*.txt" | sed 's|temp/||;s|\.txt||' | sort -n | tail -n 1)
               if [ -z "$last_file" ]; then
                   next_number=1
@@ -48,7 +48,7 @@ jobs:
               fi
           fi
           
-          # 3. Tạo nội dung log kết quả và lưu vào thư mục temp
+          # 3. Create log content and save it to the temp directory
           file_name="temp/$next_number.txt"
           current_time=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
           random_payload=$(date +%s%N | md5sum | head -c 10)
@@ -60,18 +60,18 @@ jobs:
           echo "Timestamp: $current_time" >> "$file_name"
           echo "==========================================" >> "$file_name"
           
-          echo "[SUCCESS] Đã tạo file mới: $file_name"
+          echo "[SUCCESS] Created new file: $file_name"
 
       - name: Commit and Push Changes
         run: |
           git add temp/
           
-          # Kiểm tra xem có thực sự có thay đổi để commit hay không
+          # Check if there are actual changes to commit
           if git diff --staged --quiet; then
-              echo "[INFO] Không có thay đổi mới nào để commit."
+              echo "[INFO] No new changes to commit."
           else
               current_time=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
               git commit -m "chore(temp): update automated log results [$current_time]"
               git push
-              echo "[SUCCESS] Đã đẩy code mới vào thư mục temp trên Repository thành công!"
+              echo "[SUCCESS] Successfully pushed changes to the temp directory on the repository!"
           fi
