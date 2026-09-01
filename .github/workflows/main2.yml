@@ -3,7 +3,6 @@ name: my_work
 on:
   workflow_dispatch:
   schedule:
-    # Lịch chạy cách nhau 6 tiếng, bắt đầu từ 6:00 sáng giờ VN (tương ứng UTC: 23h, 5h, 11h, 17h)
     - cron: '0 23,5,11,17 * * *'
 
 jobs:
@@ -68,7 +67,19 @@ jobs:
               return base_dir
 
           def perform_login(page, work_mail, work_password):
-              print("[LOGIN HELPER] Checking if login is required...")
+              print("[LOGIN HELPER] Checking if login/signin is required...")
+              
+              # 1. Kiểm tra xem có đang ở trang chủ chứa nút "Log in" hay không, nếu có thì bấm vào để chuyển sang trang đăng nhập
+              try:
+                  login_link = page.locator("a[href*='signin'], a:has-text('Log in')").first
+                  if login_link.is_visible(timeout=3000):
+                      print("[LOGIN HELPER] Found 'Log in' button on homepage. Clicking to navigate...")
+                      login_link.click(force=True)
+                      time.sleep(3)
+              except:
+                  pass
+
+              # 2. Kiểm tra ô nhập email xem đã hiện ra chưa
               email_selector = "input[name='email'], input[placeholder='Email']"
               is_login_page = False
               try:
@@ -104,7 +115,7 @@ jobs:
                           time.sleep(0.8)
 
                       if solved:
-                          print("[LOGIN HELPER] reCAPTCHA passed! Clicking Login button...")
+                          print("[LOGIN HELPER] reCAPTCHA passed! Clicking Login submit button...")
                           try:
                               page.get_by_role("button", name=re.compile("Log in|Sign in|Login", re.IGNORECASE)).click(force=True)
                           except:
@@ -132,25 +143,17 @@ jobs:
               
               raw_ext_path = r"C:\extensions"
               extension_path = find_extension_root(raw_ext_path)
-              print(f"[CONFIG] Target Extension Path for Chrome: {extension_path}")
-              print(f"[CONFIG] Work Link: {work_link}")
-              print(f"[CONFIG] Mail Account: {work_mail}")
 
               with sync_playwright() as p:
                   profile_dir = r"C:\temp\playwright_profile_raptor"
                   if os.path.exists(profile_dir):
-                      print("[LOG] Cleaning up old profile directory...")
                       try: shutil.rmtree(profile_dir)
-                      except Exception as e: print(f"[WARNING] Could not delete old profile: {e}")
+                      except: pass
 
-                  print("[LOG] Launching Chromium browser with extension loaded...")
                   launch_args = ["--no-sandbox"]
                   if extension_path and os.path.exists(os.path.join(extension_path, "manifest.json")):
                       launch_args.append(f"--load-extension={extension_path}")
                       launch_args.append(f"--disable-extensions-except={extension_path}")
-                      print(f"[LOG] Successfully loaded extension from: {extension_path}")
-                  else:
-                      print("[WARNING] manifest.json not found in extension path, running without extension.")
 
                   context = p.chromium.launch_persistent_context(
                       user_data_dir=profile_dir,
@@ -165,48 +168,32 @@ jobs:
                       print("[STEP 2] Navigating to target URL...")
                       print("--------------------------------------------------")
                       if work_link:
-                          print(f"[STEP 2] Navigating to URL: {work_link}")
                           page.goto(work_link, wait_until="networkidle")
                           time.sleep(5)
-                      else:
-                          print("[STEP 2 - ERROR] Missing 'MY_WORK_LINK' variable!")
 
                       print("\n--------------------------------------------------")
                       print("[STEP 3 & 4] Initial Login & reCAPTCHA Check...")
                       print("--------------------------------------------------")
-                      
-                      email_selector = "input[name='email'], input[placeholder='Email']"
-                      try:
-                          page.wait_for_selector(email_selector, timeout=5000)
-                      except:
-                          pass
-
                       perform_login(page, work_mail, work_password)
 
                       print("\n--------------------------------------------------")
                       print("[STEP 5] Checking Mining Time Status & Managing Actions...")
                       print("--------------------------------------------------")
-                      
                       time.sleep(5)
                       
-                      # Hàm phụ trợ để reload và kiểm tra đăng nhập lại nếu bị đá ra
                       def reload_and_check_auth():
                           print("[LOG] Reloading page to check status...")
                           try:
                               page.reload(wait_until="networkidle")
                               time.sleep(5)
-                              # Kiểm tra xem có bị văng ra trang login hay không
                               perform_login(page, work_mail, work_password)
                           except Exception as e:
-                              print(f"[WARNING] Error during reload/auth check: {e}")
+                              print(f"[WARNING] Error during reload: {e}")
 
-                      # Lấy thông tin thời gian hiện tại từ giao diện (đọc số giờ hoạt động)
-                      # Giả lập hoặc quét text chứa thông tin giờ trên web (ví dụ: chuỗi thời gian hoặc format Xh Ym)
+                      # Đọc thời gian hoạt động từ trang
                       hours_active = page.evaluate("""
                           () => {
                               const bodyText = document.body.innerText || '';
-                              // Tìm kiếm các mẫu giờ trên trang, ví dụ dạng "0h", "1.5h", "3h" hoặc tìm số liệu thời gian chạy
-                              // Trả về số giờ dưới dạng float nếu tìm thấy, mặc định trả về 0 nếu đang dừng hoặc mới bắt đầu
                               const match = bodyText.match(/(\\d+(?:\\.\\d+)?)\\s*(?:hours|h|giờ)/i);
                               if (match) {
                                   return parseFloat(match[1]);
@@ -215,15 +202,12 @@ jobs:
                           }
                       """)
                       
-                      print(f"[INFO] Detected active hours from page text: {hours_active}")
+                      print(f"[INFO] Detected active hours: {hours_active}")
 
-                      # Kịch bản 1: Nếu thời gian > 3 giờ -> Tắt máy chờ lần sau
                       if hours_active > 3:
-                          print("[INFO] Active time is > 3 hours. Shutting down runner as requested.")
+                          print("[INFO] Active time is > 3 hours. Shutting down runner.")
                       else:
-                          # Kịch bản 2: Nếu thời gian <= 3 giờ -> Kiểm tra nút Start hoặc treo máy chờ
-                          print("[INFO] Active time is <= 3 hours. Checking for START button...")
-                          
+                          print("[INFO] Active time <= 3 hours. Checking for START button...")
                           has_start_button = page.evaluate("""
                               () => {
                                   const elements = Array.from(document.querySelectorAll('div, button, span, a'));
@@ -236,7 +220,7 @@ jobs:
                           """)
 
                           if has_start_button:
-                              print("[INFO] Found START button. Clicking it now...")
+                              print("[INFO] Found START button. Clicking...")
                               page.evaluate("""
                                   () => {
                                       const elements = Array.from(document.querySelectorAll('div, button, span, a'));
@@ -253,28 +237,22 @@ jobs:
                                       }
                                   }
                               """)
-                              print("[INFO] Clicked START. Waiting for 60 seconds (reloading every 30s to verify)...")
-                              
-                              # Chờ 60 giây, cứ 30 giây reload lại trang một lần để kiểm tra xem đã bấm thành công chưa
+                              print("[INFO] Clicked START. Waiting 60s (reloading every 30s to verify)...")
                               time.sleep(30)
                               reload_and_check_auth()
-                              
                               time.sleep(30)
                               reload_and_check_auth()
                           else:
-                              print("[INFO] No START button found (already running or different state). Hanging and reloading every 30s...")
-                              # Treo máy, cứ mỗi 30s reload lại trang (nếu bị đăng xuất thì đăng nhập lại)
-                              for _ in range(4): # Lặp lại kiểm tra vài nhịp
+                              print("[INFO] No START button found. Hanging and reloading every 30s...")
+                              for _ in range(4):
                                   time.sleep(30)
                                   reload_and_check_auth()
 
-                      print("[FINISH] Process completed successfully. Shutting down runner.")
+                      print("[FINISH] Process completed successfully.")
                       time.sleep(5)
-
                   except Exception as e:
-                      print(f"\n[CRITICAL ERROR] An exception occurred during execution: {e}")
+                      print(f"\n[CRITICAL ERROR]: {e}")
 
-                  print("[LOG] Closing browser and finishing session.")
                   context.close()
 
           if __name__ == "__main__":
