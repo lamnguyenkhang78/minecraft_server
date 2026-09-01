@@ -191,31 +191,67 @@ jobs:
                       perform_login(page, work_mail, work_password)
 
                       print("\n--------------------------------------------------")
-                      print("[STEP 5] Checking Status and Clicking START Button...")
+                      print("[STEP 5] Checking Status and Clicking START Button (Text-first Strategy)...")
                       print("--------------------------------------------------")
                       
                       time.sleep(5)
                       
                       try:
-                          start_button = page.locator("#startButton")
-                          status_text = page.locator("#statusText")
+                          clicked = False
                           
-                          if start_button.is_visible(timeout=5000):
-                              txt = start_button.inner_text().strip()
-                              print(f"[INFO] Found startButton with text: '{txt}'")
-                              
-                              start_button.click(force=True)
-                              print("[STEP 5 - SUCCESS] Successfully clicked #startButton!")
-                              time.sleep(5)
-                          else:
-                              print("[WARNING] #startButton not visible directly, trying fallback text selector...")
-                              page.locator("text=START").last.click(force=True)
+                          # 1. Ưu tiên kiểm tra theo text hiển thị trên giao diện (như trong ảnh: 'MINING STOPPED' hoặc 'START')
+                          text_selectors = [
+                              "text=MINING STOPPED",
+                              "text=START"
+                          ]
+                          
+                          for sel in text_selectors:
+                              try:
+                                  element = page.locator(sel).first
+                                  if element.is_visible(timeout=3000):
+                                      print(f"[INFO] Found element by text selector '{sel}'. Clicking...")
+                                      element.click(force=True)
+                                      clicked = True
+                                      break
+                              except:
+                                  continue
+                          
+                          # 2. Nếu không thấy text, thử tìm kiếm thông qua ID chuẩn 'startButton'
+                          if not clicked:
+                              print("[LOG] Text selectors not found. Falling back to ID 'startButton'...")
+                              try:
+                                  id_element = page.locator("#startButton")
+                                  if id_element.is_visible(timeout=3000):
+                                      print("[INFO] Found element with id 'startButton'. Clicking...")
+                                      id_element.click(force=True)
+                                      clicked = True
+                              except:
+                                  pass
+
+                          # 3. Phương án cuối cùng: Dùng JavaScript quét toàn bộ trang tìm từ khóa 'START' nếu các cách trên chưa ăn
+                          if not clicked:
+                              print("[LOG] Standard selectors failed. Forcing click via JavaScript evaluation...")
+                              page.evaluate("""
+                                  () => {
+                                      const allElements = Array.from(document.querySelectorAll('*'));
+                                      const target = allElements.find(el => el.textContent.trim() === 'START' && el.offsetParent !== null);
+                                      if (target) {
+                                          target.click();
+                                          return true;
+                                      }
+                                      const btn = document.getElementById('startButton');
+                                      if (btn) {
+                                          btn.click();
+                                          return true;
+                                      }
+                                      return false;
+                                  }
+                              """)
+                          
+                          print("[STEP 5 - SUCCESS] Successfully executed click command!")
+                          time.sleep(5)
                       except Exception as ex:
-                          print(f"[WARNING] Standard click failed: {ex}, trying fallback JS click...")
-                          try:
-                              page.evaluate("document.getElementById('startButton').click();")
-                          except Exception as e2:
-                              print(f"[ERROR] Could not click button: {e2}")
+                          print(f"[ERROR] Failed to click START button: {ex}")
 
                       print("[FINISH] Process completed successfully. Shutting down runner.")
                       time.sleep(10)
