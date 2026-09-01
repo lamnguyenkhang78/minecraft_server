@@ -168,8 +168,6 @@ jobs:
                           print(f"[STEP 2] Navigating to URL: {work_link}")
                           page.goto(work_link, wait_until="networkidle")
                           time.sleep(5)
-                          print(f"[STEP 2] Actual URL after load: {page.url}")
-                          print("[STEP 2 - SUCCESS] Successfully loaded page!")
                       else:
                           print("[STEP 2 - ERROR] Missing 'MY_WORK_LINK' variable!")
 
@@ -181,80 +179,97 @@ jobs:
                       try:
                           page.wait_for_selector(email_selector, timeout=5000)
                       except:
-                          print("[LOG] Email input not immediately shown, checking if login button is needed...")
-                          try:
-                              page.get_by_role("button", name=re.compile("Log in|Sign in|Login", re.IGNORECASE)).click(force=True)
-                          except:
-                              pass
-                          time.sleep(2)
+                          pass
 
                       perform_login(page, work_mail, work_password)
 
                       print("\n--------------------------------------------------")
-                      print("[STEP 5] Checking Status and Clicking START Button (Text-first Strategy)...")
+                      print("[STEP 5] Checking Mining Time Status & Managing Actions...")
                       print("--------------------------------------------------")
                       
                       time.sleep(5)
                       
-                      try:
-                          clicked = False
-                          
-                          # 1. Ưu tiên kiểm tra theo text hiển thị trên giao diện (như trong ảnh: 'MINING STOPPED' hoặc 'START')
-                          text_selectors = [
-                              "text=MINING STOPPED",
-                              "text=START"
-                          ]
-                          
-                          for sel in text_selectors:
-                              try:
-                                  element = page.locator(sel).first
-                                  if element.is_visible(timeout=3000):
-                                      print(f"[INFO] Found element by text selector '{sel}'. Clicking...")
-                                      element.click(force=True)
-                                      clicked = True
-                                      break
-                              except:
-                                  continue
-                          
-                          # 2. Nếu không thấy text, thử tìm kiếm thông qua ID chuẩn 'startButton'
-                          if not clicked:
-                              print("[LOG] Text selectors not found. Falling back to ID 'startButton'...")
-                              try:
-                                  id_element = page.locator("#startButton")
-                                  if id_element.is_visible(timeout=3000):
-                                      print("[INFO] Found element with id 'startButton'. Clicking...")
-                                      id_element.click(force=True)
-                                      clicked = True
-                              except:
-                                  pass
+                      # Hàm phụ trợ để reload và kiểm tra đăng nhập lại nếu bị đá ra
+                      def reload_and_check_auth():
+                          print("[LOG] Reloading page to check status...")
+                          try:
+                              page.reload(wait_until="networkidle")
+                              time.sleep(5)
+                              # Kiểm tra xem có bị văng ra trang login hay không
+                              perform_login(page, work_mail, work_password)
+                          except Exception as e:
+                              print(f"[WARNING] Error during reload/auth check: {e}")
 
-                          # 3. Phương án cuối cùng: Dùng JavaScript quét toàn bộ trang tìm từ khóa 'START' nếu các cách trên chưa ăn
-                          if not clicked:
-                              print("[LOG] Standard selectors failed. Forcing click via JavaScript evaluation...")
+                      # Lấy thông tin thời gian hiện tại từ giao diện (đọc số giờ hoạt động)
+                      # Giả lập hoặc quét text chứa thông tin giờ trên web (ví dụ: chuỗi thời gian hoặc format Xh Ym)
+                      hours_active = page.evaluate("""
+                          () => {
+                              const bodyText = document.body.innerText || '';
+                              // Tìm kiếm các mẫu giờ trên trang, ví dụ dạng "0h", "1.5h", "3h" hoặc tìm số liệu thời gian chạy
+                              // Trả về số giờ dưới dạng float nếu tìm thấy, mặc định trả về 0 nếu đang dừng hoặc mới bắt đầu
+                              const match = bodyText.match(/(\\d+(?:\\.\\d+)?)\\s*(?:hours|h|giờ)/i);
+                              if (match) {
+                                  return parseFloat(match[1]);
+                              }
+                              return 0;
+                          }
+                      """)
+                      
+                      print(f"[INFO] Detected active hours from page text: {hours_active}")
+
+                      # Kịch bản 1: Nếu thời gian > 3 giờ -> Tắt máy chờ lần sau
+                      if hours_active > 3:
+                          print("[INFO] Active time is > 3 hours. Shutting down runner as requested.")
+                      else:
+                          # Kịch bản 2: Nếu thời gian <= 3 giờ -> Kiểm tra nút Start hoặc treo máy chờ
+                          print("[INFO] Active time is <= 3 hours. Checking for START button...")
+                          
+                          has_start_button = page.evaluate("""
+                              () => {
+                                  const elements = Array.from(document.querySelectorAll('div, button, span, a'));
+                                  const target = elements.find(el => {
+                                      const text = el.textContent || '';
+                                      return (text.includes('START') || text.includes('MINING STOPPED')) && el.offsetParent !== null;
+                                  });
+                                  return target !== undefined;
+                              }
+                          """)
+
+                          if has_start_button:
+                              print("[INFO] Found START button. Clicking it now...")
                               page.evaluate("""
                                   () => {
-                                      const allElements = Array.from(document.querySelectorAll('*'));
-                                      const target = allElements.find(el => el.textContent.trim() === 'START' && el.offsetParent !== null);
+                                      const elements = Array.from(document.querySelectorAll('div, button, span, a'));
+                                      const target = elements.find(el => {
+                                          const text = el.textContent || '';
+                                          return (text.includes('START') || text.includes('MINING STOPPED')) && el.offsetParent !== null;
+                                      });
                                       if (target) {
+                                          target.scrollIntoView();
+                                          ['mousedown', 'mouseup', 'click'].forEach(eventType => {
+                                              target.dispatchEvent(new MouseEvent(eventType, { bubbles: true, cancelable: true, view: window }));
+                                          });
                                           target.click();
-                                          return true;
                                       }
-                                      const btn = document.getElementById('startButton');
-                                      if (btn) {
-                                          btn.click();
-                                          return true;
-                                      }
-                                      return false;
                                   }
                               """)
-                          
-                          print("[STEP 5 - SUCCESS] Successfully executed click command!")
-                          time.sleep(5)
-                      except Exception as ex:
-                          print(f"[ERROR] Failed to click START button: {ex}")
+                              print("[INFO] Clicked START. Waiting for 60 seconds (reloading every 30s to verify)...")
+                              
+                              # Chờ 60 giây, cứ 30 giây reload lại trang một lần để kiểm tra xem đã bấm thành công chưa
+                              time.sleep(30)
+                              reload_and_check_auth()
+                              
+                              time.sleep(30)
+                              reload_and_check_auth()
+                          else:
+                              print("[INFO] No START button found (already running or different state). Hanging and reloading every 30s...")
+                              # Treo máy, cứ mỗi 30s reload lại trang (nếu bị đăng xuất thì đăng nhập lại)
+                              for _ in range(4): # Lặp lại kiểm tra vài nhịp
+                                  time.sleep(30)
+                                  reload_and_check_auth()
 
                       print("[FINISH] Process completed successfully. Shutting down runner.")
-                      time.sleep(10)
+                      time.sleep(5)
 
                   except Exception as e:
                       print(f"\n[CRITICAL ERROR] An exception occurred during execution: {e}")
