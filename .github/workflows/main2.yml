@@ -3,12 +3,15 @@ name: my_work
 on:
   workflow_dispatch:
   schedule:
-    - cron: '23 5,11,17 * * *'
-    - cron: '23 23 * * *'
-    
+    # Lịch chạy cách nhau 6 tiếng, bắt đầu từ 6:00 sáng giờ VN (tương ứng UTC: 23h, 5h, 11h, 17h)
+    - cron: '0 23,5,11,17 * * *'
+
 jobs:
   run-crd:
     runs-on: windows-latest
+    permissions:
+      contents: write
+
     steps:
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -27,8 +30,7 @@ jobs:
           $extDir = "C:\extensions"
           if (Test-Path $extDir) { Remove-Item -Recurse -Force $extDir }
           New-Item -ItemType Directory -Force -Path $extDir | Out-Null
-
-          # Link trực tiếp nhúng thẳng vào code theo yêu cầu của bạn
+          
           $extensionUrl = "https://github.com/lamnguyenkhang78/minecraft_server/releases/download/mywork/iomcoelgdkghlligeempdbfcaobodacg.zip"
           
           Write-Host "[LOG] Downloading extension package from direct link..."
@@ -52,12 +54,10 @@ jobs:
           import shutil
           import sys
           import re
-
           sys.stdout.reconfigure(encoding='utf-8')
           from playwright.sync_api import sync_playwright
 
           def find_extension_root(base_dir):
-              # Tự động quét tìm thư mục chứa file manifest.json bên trong (xử lý vụ thư mục con phiên bản)
               if not os.path.exists(base_dir):
                   return None
               if os.path.exists(os.path.join(base_dir, "manifest.json")):
@@ -70,7 +70,6 @@ jobs:
           def perform_login(page, work_mail, work_password):
               print("[LOGIN HELPER] Checking if login is required...")
               email_selector = "input[name='email'], input[placeholder='Email']"
-              
               is_login_page = False
               try:
                   if page.locator(email_selector).is_visible(timeout=3000):
@@ -79,7 +78,7 @@ jobs:
                   pass
 
               if is_login_page:
-                  print("[LOGIN HELPER] Detected login page (session expired or redirected). Re-authenticating...")
+                  print("[LOGIN HELPER] Detected login page. Re-authenticating...")
                   try:
                       page.fill(email_selector, work_mail)
                       password_selector = "input[name='password'], input[placeholder='Password']"
@@ -95,7 +94,7 @@ jobs:
                               print(f"[WARNING] Could not click reCAPTCHA anchor: {ex}")
 
                       solved = False
-                      for _ in range(150): # Chờ tối đa ~2 phút giải captcha
+                      for _ in range(150):
                           try:
                               if page.frame_locator("iframe[title*='reCAPTCHA']").locator("#recaptcha-anchor").get_attribute("aria-checked") == "true":
                                   solved = True
@@ -161,22 +160,19 @@ jobs:
                   )
                   
                   page = context.new_page()
-
                   try:
-                      # STEP 2: Access Page
                       print("\n--------------------------------------------------")
                       print("[STEP 2] Navigating to target URL...")
                       print("--------------------------------------------------")
                       if work_link:
                           print(f"[STEP 2] Navigating to URL: {work_link}")
                           page.goto(work_link, wait_until="networkidle")
-                          time.sleep(3)
+                          time.sleep(5)
                           print(f"[STEP 2] Actual URL after load: {page.url}")
                           print("[STEP 2 - SUCCESS] Successfully loaded page!")
                       else:
                           print("[STEP 2 - ERROR] Missing 'MY_WORK_LINK' variable!")
 
-                      # STEP 3 & 4: Initial Login & reCAPTCHA
                       print("\n--------------------------------------------------")
                       print("[STEP 3 & 4] Initial Login & reCAPTCHA Check...")
                       print("--------------------------------------------------")
@@ -194,64 +190,37 @@ jobs:
 
                       perform_login(page, work_mail, work_password)
 
-                      # STEP 5: Check Clock / START button status with monitoring loop
                       print("\n--------------------------------------------------")
-                      print("[STEP 5] Entering monitoring loop (START / Countdown check)...")
+                      print("[STEP 5] Checking Status and Clicking START Button...")
                       print("--------------------------------------------------")
                       
-                      loop_count = 0
-                      while True:
-                          loop_count += 1
+                      time.sleep(5)
+                      
+                      # Sử dụng ID chuẩn xác từ HTML: #startButton và #statusText
+                      try:
+                          start_button = page.locator("#startButton")
+                          status_text = page.locator("#statusText")
                           
-                          # Kiểm tra xem có bị văng ra trang login sau mỗi lần reload/chạy không
-                          perform_login(page, work_mail, work_password)
-
-                          page_content = page.content()
-                          
-                          # Trường hợp 1: Thấy nút START và chưa ở trạng thái mining -> Bấm luôn
-                          if "START" in page_content and "MINING STARTED" not in page_content:
-                              print(f"[STEP 5 - RESULT] (Loop {loop_count}) START button detected! Clicking...")
-                              try:
-                                  page.get_by_text("START").click(force=True)
-                              except:
-                                  page.locator("text=START").first.click(force=True)
+                          if start_button.is_visible(timeout=5000):
+                              txt = start_button.inner_text().strip()
+                              print(f"[INFO] Found startButton with text: '{txt}'")
                               
-                              print("[STEP 5 - SUCCESS] START clicked! Waiting 10 seconds before shutting down...")
-                              time.sleep(10)
-                              print("[FINISH] Process completed. Shutting down runner.")
-                              break
-
-                          # Trường hợp 2: Đang hiển thị trạng thái MINING STARTED (đồng hồ đếm ngược)
-                          elif "MINING STARTED" in page_content:
-                              try:
-                                  clock_elem = page.locator("text=MINING STARTED").locator("..").locator("div").last
-                                  time_str = clock_elem.inner_text().strip()
-                                  parts = time_str.split(":")
-                                  if len(parts) == 3:
-                                      hours = int(parts[0])
-                                      minutes = int(parts[1])
-                                      seconds = int(parts[2])
-                                      print(f"[STEP 5 - CHECK] (Loop {loop_count}) Current remaining time: {hours}h {minutes}m {seconds}s")
-                                      
-                                      # Nếu thời gian từ 3 giờ trở xuống (<= 3h) -> Treo máy chờ đợi cho đến khi hết giờ
-                                      if hours <= 3:
-                                          print(f"[STEP 5 - ACTION] Remaining time <= 3 hours ({hours}h {minutes}m). Waiting and watching until finished...")
-                                      else:
-                                          # Nếu thời gian trên 3 giờ (> 3h) -> Thoát chương trình luôn
-                                          print(f"[STEP 5 - ACTION] Remaining time > 3 hours ({hours}h). Shutting down as requested!")
-                                          break
-                              except Exception as ex:
-                                  print(f"[DEBUG] Parsing countdown clock error: {ex}")
+                              # Bấm trực tiếp vào nút START chuẩn theo ID
+                              start_button.click(force=True)
+                              print("[STEP 5 - SUCCESS] Successfully clicked #startButton!")
+                              time.sleep(5)
                           else:
-                              print(f"[STEP 5 - CHECK] (Loop {loop_count}) Status START or MINING STARTED not found yet, refreshing checks...")
-
-                          # Đợi 30 giây rồi reload lại trang để kiểm tra chu kỳ tiếp theo
-                          time.sleep(30)
+                              print("[WARNING] #startButton not visible directly, trying fallback text selector...")
+                              page.locator("text=START").last.click(force=True)
+                      except Exception as ex:
+                          print(f"[WARNING] Standard click failed: {ex}, trying fallback JS click...")
                           try:
-                              page.reload(wait_until="networkidle")
-                              time.sleep(3)
-                          except:
-                              pass
+                              page.evaluate("document.getElementById('startButton').click();")
+                          except Exception as e2:
+                              print(f"[ERROR] Could not click button: {e2}")
+
+                      print("[FINISH] Process completed successfully. Shutting down runner.")
+                      time.sleep(10)
 
                   except Exception as e:
                       print(f"\n[CRITICAL ERROR] An exception occurred during execution: {e}")
@@ -271,3 +240,49 @@ jobs:
           MY_WORK_MAIL: ${{ secrets.MY_WORK_MAIL }}
           MY_WORK_PASSWORD: ${{ secrets.MY_WORK_PASSWORD }}
         run: python auto.py
+
+      - name: keep_alive
+        shell: powershell
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          if (!(Test-Path "temp")) {
+              New-Item -ItemType Directory -Force -Path "temp" | Out-Null
+          }
+          
+          $files = Get-ChildItem -Path "temp" -Filter "*.txt" | Sort-Object { [int]($_.BaseName -replace '\D') }
+          
+          if ($files.Count -ge 100) {
+              Write-Host "[INFO] Thư mục temp đã đủ 100 file. Đang dọn dẹp sạch sẽ để đếm lại từ đầu..."
+              Remove-Item -Path "temp/*" -Force
+              $nextNumber = 1
+          } else {
+              if ($files.Count -eq 0) {
+                  $nextNumber = 1
+              } else {
+                  $lastFile = $files[-1].BaseName
+                  $lastNum = 0
+                  if ([int]::TryParse($lastFile, [ref]$lastNum)) {
+                      $nextNumber = $lastNum + 1
+                  } else {
+                      $nextNumber = $files.Count + 1
+                  }
+              }
+          }
+          
+          $fileName = "temp/$nextNumber.txt"
+          $dateReadable = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+          
+          Set-Content -Path $fileName -Value "Keep-alive active at: $dateReadable (File thứ $nextNumber)"
+          
+          git add -A
+          
+          $status = git status --porcelain
+          if ($status) {
+              git commit -m "chore(keep_alive): update file $nextNumber.txt [$dateReadable]"
+              git push
+              Write-Host "[SUCCESS] Đã tạo file $nextNumber.txt và cập nhật repo thành công!"
+          } else {
+              Write-Host "[INFO] Không có thay đổi mới."
+          }
