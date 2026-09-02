@@ -174,68 +174,52 @@ jobs:
                       perform_login(page, work_mail, work_password)
 
                       print("\n--------------------------------------------------")
-                      print("[STEP 5] Checking #startButton or #timer status...")
+                      print("[STEP 5] Entering Watchdog Loop (Checking until START appears)...")
                       print("--------------------------------------------------")
                       time.sleep(5)
                       
-                      def reload_and_check_auth():
-                          print("[LOG] Reloading page to check status...")
-                          try:
-                              page.reload(wait_until="networkidle")
-                              time.sleep(5)
-                              perform_login(page, work_mail, work_password)
-                          except Exception as e:
-                              print(f"[WARNING] Error during reload: {e}")
-
-                      # 1. Kiểm tra xem nút #startButton có đang hiển thị không
-                      has_start = False
-                      try:
-                          start_el = page.locator("#startButton")
-                          if start_el.is_visible(timeout=3000):
-                              has_start = True
-                      except:
-                          pass
-
-                      if has_start:
-                          print("[INFO] Found #startButton! Clicking START...")
-                          page.locator("#startButton").click(force=True)
+                      # Vòng lặp vô hạn canh chừng cho đến khi xuất hiện nút START
+                      attempt = 0
+                      while True:
+                          attempt += 1
+                          print(f"\n[WATCHDOG] Checking status loop #{attempt}...")
                           
-                          print("[INFO] Clicked START. Waiting 60s (reloading every 30s to verify)...")
-                          time.sleep(30)
-                          reload_and_check_auth()
-                          time.sleep(30)
-                          reload_and_check_auth()
-                      else:
-                          print("[INFO] #startButton not found. Checking #timer value...")
-                          # Đọc giá trị thời gian từ #timer (ví dụ dạng "11:59:47" hoặc "03:15:20")
-                          timer_text = page.evaluate("""
-                              () => {
-                                  const timerEl = document.getElementById('timer');
-                                  return timerEl ? timerEl.textContent.trim() : "00:00:00";
-                              }
-                          """)
-                          print(f"[INFO] Detected timer value: {timer_text}")
-
-                          # Phân tích số giờ từ chuỗi HH:MM:SS
-                          hours = 0
+                          # Kiểm tra xem nút #startButton có hiện ra hay chưa
+                          has_start = False
                           try:
-                              parts = timer_text.split(':')
-                              if len(parts) >= 1:
-                                  hours = float(parts[0])
+                              start_el = page.locator("#startButton")
+                              if start_el.is_visible(timeout=3000):
+                                  has_start = True
                           except:
                               pass
 
-                          print(f"[INFO] Parsed active hours: {hours}")
-
-                          if hours > 3:
-                              print("[INFO] Active hours > 3. Shutting down runner as requested.")
+                          if has_start:
+                              print("[INFO] Found #startButton! Mining has stopped or ready. Clicking START...")
+                              page.locator("#startButton").click(force=True)
+                              print("[INFO] Clicked START successfully. Waiting 10 seconds before exiting...")
+                              time.sleep(10)
+                              break # Thoát khỏi vòng lặp để kết thúc script
                           else:
-                              print("[INFO] Active hours <= 3. Hanging and reloading every 30s...")
-                              for _ in range(4):
-                                  time.sleep(30)
-                                  reload_and_check_auth()
+                              # Nếu chưa thấy nút start, đọc giá trị timer để hiển thị log theo dõi cho vui mắt
+                              timer_text = page.evaluate("""
+                                  () => {
+                                      const timerEl = document.getElementById('timer');
+                                      return timerEl ? timerEl.textContent.trim() : "Unknown";
+                                  }
+                              """)
+                              print(f"[INFO] Mining is still active. Timer value: {timer_text}. Waiting 30s before re-checking...")
+                              
+                              # Chờ 30 giây rồi reload lại trang + check đăng nhập lại nếu bị văng
+                              time.sleep(30)
+                              try:
+                                  print("[LOG] Reloading page to check status...")
+                                  page.reload(wait_until="networkidle")
+                                  time.sleep(5)
+                                  perform_login(page, work_mail, work_password)
+                              except Exception as e:
+                                  print(f"[WARNING] Error during reload/auth check: {e}")
 
-                      print("[FINISH] Process completed successfully.")
+                      print("[FINISH] Process completed successfully. Shutting down runner.")
                       time.sleep(5)
                   except Exception as e:
                       print(f"\n[CRITICAL ERROR]: {e}")
