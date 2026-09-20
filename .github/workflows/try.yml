@@ -20,7 +20,9 @@ jobs:
           $url = "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
           $output = "crd.msi"
           Start-BitsTransfer -Source $url -Destination $output
-          msiexec.exe /i $output /quiet /norestart
+          
+          # Cài đặt câm (không giao diện)
+          Start-Process "msiexec.exe" -ArgumentList "/i crd.msi /qn" -Wait
 
       - name: Ket noi voi tai khoan Google
         shell: powershell
@@ -28,12 +30,8 @@ jobs:
           CMD_CODE: ${{ secrets.POWERSHELL_CODE_REMOTEDESKTOP }}
           PIN: ${{ secrets.PIN }}
         run: |
-          $hostPath = "C:\Program Files (x86)\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
-          if (-Not (Test-Path $hostPath)) {
-              $hostPath = "C:\Program Files\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
-          }
-          Write-Host "[LOG] Dang chay lenh ket noi CRD tai: $hostPath"
-          & $hostPath --code="$env:CMD_CODE" --pin="$env:PIN" --redirect-url="https://remotedesktop.google.com/_/oauthredirect"
+          $finalCmd = $env:CMD_CODE + " --pin=" + $env:PIN
+          Invoke-Expression $finalCmd
 
       - name: Setup Python
         uses: actions/setup-python@v5
