@@ -22,7 +22,7 @@ jobs:
       - name: Install dependencies
         shell: powershell
         run: |
-          pip install playwright
+          pip install playwright pyautogui
           playwright install chromium
 
       - name: Prepare Extension & Script
@@ -54,9 +54,11 @@ jobs:
           import os
           import shutil
           import sys
+          import json
           import re
           sys.stdout.reconfigure(encoding='utf-8')
           from playwright.sync_api import sync_playwright
+          import pyautogui
 
           def find_extension_root(base_dir):
               if not os.path.exists(base_dir):
@@ -67,6 +69,29 @@ jobs:
                   if "manifest.json" in files:
                       return root
               return base_dir
+
+          def setup_chrome_preferences(profile_dir):
+              try:
+                  os.makedirs(profile_dir, exist_ok=True)
+                  default_dir = os.path.join(profile_dir, "Default")
+                  os.makedirs(default_dir, exist_ok=True)
+                  
+                  prefs_path = os.path.join(default_dir, "Preferences")
+                  prefs = {
+                      "credentials_enable_service": False,
+                      "profile": {
+                          "password_manager_enabled": False
+                      },
+                      "autofill": {
+                          "profile_enabled": False,
+                          "credit_card_enabled": False
+                      }
+                  }
+                  with open(prefs_path, "w", encoding="utf-8") as f:
+                      json.dump(prefs, f)
+                  print("[SETUP] Chrome preferences updated.")
+              except Exception as e:
+                  print(f"[WARNING] Could not write Chrome preferences: {e}")
 
           def perform_login(page, work_mail, work_password):
               print("[LOGIN HELPER] Checking if login/signin is required...")
@@ -122,7 +147,16 @@ jobs:
                                   page.locator("text=Log in").first.click(force=True)
                               except:
                                   page.locator("button[type='submit']").click(force=True)
-                          time.sleep(5)
+                          
+                          print("[LOGIN HELPER] Login submitted. Waiting 2s before pressing ENTER...")
+                          time.sleep(2)
+                          
+                          print("[LOGIN HELPER] Pressing ENTER via PyAutoGUI to dismiss popup...")
+                          pyautogui.press('enter')
+                          
+                          print("[LOGIN HELPER] Waiting 1s after pressing ENTER...")
+                          time.sleep(1)
+                          
                           print("[LOGIN HELPER] Re-login completed successfully!")
                           return True
                       else:
@@ -130,26 +164,6 @@ jobs:
                   except Exception as ex:
                       print(f"[ERROR] Exception during re-login process: {ex}")
               return False
-
-          def handle_popup_notification(page):
-              print("[POPUP CHECK] Waiting 5s to check for security or password popups...")
-              time.sleep(5)
-              try:
-                  ok_btn = page.locator("button:has-text('OK'), div[role='dialog'] button:has-text('OK'), text='OK'")
-                  close_btn = page.locator("button:has-text('Close'), button[aria-label='Close'], text='Close'")
-                  
-                  if ok_btn.first.is_visible(timeout=3000):
-                      print("[POPUP CHECK] Found 'OK' popup button. Clicking...")
-                      ok_btn.first.click(force=True)
-                      time.sleep(2)
-                  elif close_btn.first.is_visible(timeout=3000):
-                      print("[POPUP CHECK] Found 'Close' popup button. Clicking...")
-                      close_btn.first.click(force=True)
-                      time.sleep(2)
-                  else:
-                      print("[POPUP CHECK] No blocking popup detected.")
-              except Exception as e:
-                  print(f"[POPUP CHECK] Notice while handling popup: {e}")
 
           def parse_hours_from_timer(timer_str):
               try:
@@ -165,10 +179,14 @@ jobs:
               print("[INIT] Starting automated process...")
               print("==================================================")
               
-              work_link = os.environ.get("MY_WORK_LINK", "")
-              work_mail = os.environ.get("MY_WORK_MAIL", "")
-              work_password = os.environ.get("MY_WORK_PASSWORD", "")
+              work_link = os.environ.get("MY_WORK_LINK")
+              work_mail = os.environ.get("MY_WORK_MAIL")
+              work_password = os.environ.get("MY_WORK_PASSWORD")
               
+              if not work_link or not work_mail or not work_password:
+                  print("[CRITICAL ERROR] Missing one or more environment variables (MY_WORK_LINK, MY_WORK_MAIL, MY_WORK_PASSWORD).")
+                  return
+
               raw_ext_path = r"C:\extensions"
               extension_path = find_extension_root(raw_ext_path)
 
@@ -181,7 +199,14 @@ jobs:
                       except: 
                           pass
 
-                  launch_args = ["--no-sandbox"]
+                  setup_chrome_preferences(profile_dir)
+
+                  launch_args = [
+                      "--no-sandbox",
+                      "--disable-save-password-bubble",
+                      "--disable-features=PasswordLeakDetection,AutofillServerCommunication"
+                  ]
+                  
                   if extension_path and os.path.exists(os.path.join(extension_path, "manifest.json")):
                       launch_args.append(f"--load-extension={extension_path}")
                       launch_args.append(f"--disable-extensions-except={extension_path}")
@@ -190,34 +215,31 @@ jobs:
                       user_data_dir=profile_dir,
                       headless=False,
                       args=launch_args,
-                      viewport={"width": 1366, "height": 768}
+                      viewport={"width": 1366, "height": 768},
+                      ignore_default_args=["--enable-automation"]
                   )
                   
                   page = context.new_page()
                   try:
                       print("\n--------------------------------------------------")
-                      print("[STEP 2] Navigating to target URL...")
+                      print("[STEP 1] Navigating to target URL...")
                       print("--------------------------------------------------")
-                      if work_link:
-                          page.goto(work_link, wait_until="domcontentloaded", timeout=60000)
-                          time.sleep(5)
+                      page.goto(work_link, wait_until="domcontentloaded", timeout=60000)
+                      time.sleep(5)
 
                       print("\n--------------------------------------------------")
-                      print("[STEP 3 & 4] Initial Login & reCAPTCHA Check...")
+                      print("[STEP 2] Performing initial login...")
                       print("--------------------------------------------------")
                       perform_login(page, work_mail, work_password)
 
-                      handle_popup_notification(page)
-
                       print("\n--------------------------------------------------")
-                      print("[STEP 5] Entering Watchdog Loop (Checking timer and START button)...")
+                      print("[STEP 3] Entering continuous watchdog loop...")
                       print("--------------------------------------------------")
-                      time.sleep(5)
                       
                       attempt = 0
                       while True:
                           attempt += 1
-                          print(f"\n[WATCHDOG] Checking status loop #{attempt}...")
+                          print(f"\n[WATCHDOG Loop #{attempt}] Checking state...")
                           
                           timer_text = page.evaluate("""
                               () => {
@@ -225,11 +247,11 @@ jobs:
                                   return timerEl ? timerEl.textContent.trim() : "Unknown";
                               }
                           """)
-                          print(f"[INFO] Current timer value: {timer_text}")
+                          print(f"[INFO] Timer value: {timer_text}")
                           
                           hours_left = parse_hours_from_timer(timer_text)
                           if timer_text != "Unknown" and hours_left > 3:
-                              print(f"[INFO] Remaining time ({timer_text}) is > 3 hours. Shutting down runner to save resources.")
+                              print(f"[INFO] Remaining time is {timer_text} (> 3 hours). Shutting down task as requested.")
                               break
 
                           has_start = False
@@ -243,23 +265,22 @@ jobs:
                           if has_start:
                               print("[INFO] Found #startButton! Clicking START...")
                               page.locator("#startButton").click(force=True)
-                              print("[INFO] Clicked START successfully. Waiting 10 seconds before exiting...")
+                              print("[INFO] Clicked START successfully. Waiting 10 seconds before exit...")
                               time.sleep(10)
                               break
                           else:
-                              print(f"[INFO] Mining is still active or time <= 3h. Waiting 30s before re-checking...")
+                              print("[INFO] #startButton not visible or time <= 3h. Waiting 30s to reload and re-check...")
                               time.sleep(30)
                               try:
-                                  print("[LOG] Reloading page to check status...")
+                                  print("[LOG] Reloading page...")
                                   page.reload(wait_until="domcontentloaded", timeout=60000)
-                                  time.sleep(5)
+                                  time.sleep(3)
                                   perform_login(page, work_mail, work_password)
-                                  handle_popup_notification(page)
                               except Exception as e:
-                                  print(f"[WARNING] Error during reload/auth check: {e}")
+                                  print(f"[WARNING] Error during reload loop: {e}")
 
-                      print("[FINISH] Process completed successfully. Shutting down runner.")
-                      time.sleep(5)
+                      print("[FINISH] Script execution finished successfully.")
+                      time.sleep(3)
                   except Exception as e:
                       print(f"\n[CRITICAL ERROR]: {e}")
 
