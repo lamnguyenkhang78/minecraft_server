@@ -10,8 +10,10 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: write
-
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -129,6 +131,35 @@ jobs:
                       print(f"[ERROR] Exception during re-login process: {ex}")
               return False
 
+          def handle_popup_notification(page):
+              print("[POPUP CHECK] Waiting 5s to check for security or password popups...")
+              time.sleep(5)
+              try:
+                  ok_btn = page.locator("button:has-text('OK'), div[role='dialog'] button:has-text('OK'), text='OK'")
+                  close_btn = page.locator("button:has-text('Close'), button[aria-label='Close'], text='Close'")
+                  
+                  if ok_btn.first.is_visible(timeout=3000):
+                      print("[POPUP CHECK] Found 'OK' popup button. Clicking...")
+                      ok_btn.first.click(force=True)
+                      time.sleep(2)
+                  elif close_btn.first.is_visible(timeout=3000):
+                      print("[POPUP CHECK] Found 'Close' popup button. Clicking...")
+                      close_btn.first.click(force=True)
+                      time.sleep(2)
+                  else:
+                      print("[POPUP CHECK] No blocking popup detected.")
+              except Exception as e:
+                  print(f"[POPUP CHECK] Notice while handling popup: {e}")
+
+          def parse_hours_from_timer(timer_str):
+              try:
+                  parts = timer_str.split(":")
+                  if len(parts) >= 1:
+                      return float(parts[0])
+              except:
+                  pass
+              return 0.0
+
           def check_and_process():
               print("==================================================")
               print("[INIT] Starting automated process...")
@@ -144,8 +175,11 @@ jobs:
               with sync_playwright() as p:
                   profile_dir = r"C:\temp\playwright_profile_raptor"
                   if os.path.exists(profile_dir):
-                      try: shutil.rmtree(profile_dir)
-                      except: pass
+                      try: 
+                          shutil.rmtree(profile_dir)
+                          print("[LOG] Cleared old browser profile successfully.")
+                      except: 
+                          pass
 
                   launch_args = ["--no-sandbox"]
                   if extension_path and os.path.exists(os.path.join(extension_path, "manifest.json")):
@@ -165,7 +199,7 @@ jobs:
                       print("[STEP 2] Navigating to target URL...")
                       print("--------------------------------------------------")
                       if work_link:
-                          page.goto(work_link, wait_until="networkidle")
+                          page.goto(work_link, wait_until="domcontentloaded", timeout=60000)
                           time.sleep(5)
 
                       print("\n--------------------------------------------------")
@@ -173,18 +207,31 @@ jobs:
                       print("--------------------------------------------------")
                       perform_login(page, work_mail, work_password)
 
+                      handle_popup_notification(page)
+
                       print("\n--------------------------------------------------")
-                      print("[STEP 5] Entering Watchdog Loop (Checking until START appears)...")
+                      print("[STEP 5] Entering Watchdog Loop (Checking timer and START button)...")
                       print("--------------------------------------------------")
                       time.sleep(5)
                       
-                      # Vòng lặp vô hạn canh chừng cho đến khi xuất hiện nút START
                       attempt = 0
                       while True:
                           attempt += 1
                           print(f"\n[WATCHDOG] Checking status loop #{attempt}...")
                           
-                          # Kiểm tra xem nút #startButton có hiện ra hay chưa
+                          timer_text = page.evaluate("""
+                              () => {
+                                  const timerEl = document.getElementById('timer');
+                                  return timerEl ? timerEl.textContent.trim() : "Unknown";
+                              }
+                          """)
+                          print(f"[INFO] Current timer value: {timer_text}")
+                          
+                          hours_left = parse_hours_from_timer(timer_text)
+                          if timer_text != "Unknown" and hours_left > 3:
+                              print(f"[INFO] Remaining time ({timer_text}) is > 3 hours. Shutting down runner to save resources.")
+                              break
+
                           has_start = False
                           try:
                               start_el = page.locator("#startButton")
@@ -194,28 +241,20 @@ jobs:
                               pass
 
                           if has_start:
-                              print("[INFO] Found #startButton! Mining has stopped or ready. Clicking START...")
+                              print("[INFO] Found #startButton! Clicking START...")
                               page.locator("#startButton").click(force=True)
                               print("[INFO] Clicked START successfully. Waiting 10 seconds before exiting...")
                               time.sleep(10)
-                              break # Thoát khỏi vòng lặp để kết thúc script
+                              break
                           else:
-                              # Nếu chưa thấy nút start, đọc giá trị timer để hiển thị log theo dõi cho vui mắt
-                              timer_text = page.evaluate("""
-                                  () => {
-                                      const timerEl = document.getElementById('timer');
-                                      return timerEl ? timerEl.textContent.trim() : "Unknown";
-                                  }
-                              """)
-                              print(f"[INFO] Mining is still active. Timer value: {timer_text}. Waiting 30s before re-checking...")
-                              
-                              # Chờ 30 giây rồi reload lại trang + check đăng nhập lại nếu bị văng
+                              print(f"[INFO] Mining is still active or time <= 3h. Waiting 30s before re-checking...")
                               time.sleep(30)
                               try:
                                   print("[LOG] Reloading page to check status...")
-                                  page.reload(wait_until="networkidle")
+                                  page.reload(wait_until="domcontentloaded", timeout=60000)
                                   time.sleep(5)
                                   perform_login(page, work_mail, work_password)
+                                  handle_popup_notification(page)
                               except Exception as e:
                                   print(f"[WARNING] Error during reload/auth check: {e}")
 
