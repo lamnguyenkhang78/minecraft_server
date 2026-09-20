@@ -1,4 +1,4 @@
-name: try
+name: my_work
 
 on:
   workflow_dispatch:
@@ -13,6 +13,27 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Cai dat CRD (Link chuan)
+        shell: powershell
+        run: |
+          $url = "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
+          $output = "crd.msi"
+          Start-BitsTransfer -Source $url -Destination $output
+          msiexec.exe /i $output /quiet /norestart
+
+      - name: Ket noi voi tai khoan Google
+        shell: powershell
+        env:
+          CMD_CODE: ${{ secrets.POWERSHELL_CODE_REMOTEDESKTOP }}
+          PIN: ${{ secrets.PIN }}
+        run: |
+          $hostPath = "C:\Program Files (x86)\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
+          if (-Not (Test-Path $hostPath)) {
+              $hostPath = "C:\Program Files\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
+          }
+          Write-Host "[LOG] Dang chay lenh ket noi CRD tai: $hostPath"
+          & $hostPath --code="$env:CMD_CODE" --pin="$env:PIN" --redirect-url="https://remotedesktop.google.com/_/oauthredirect"
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -45,23 +66,6 @@ jobs:
           } catch {
               Write-Host "[ERROR] Failed to download extension: $_"
           }
-
-      - name: Cai dat CRD (Link chuan)
-        shell: powershell
-        run: |
-          $url = "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
-          $output = "crd.msi"
-          Start-BitsTransfer -Source $url -Destination $output
-          msiexec.exe /i $output /quiet /norestart
-
-      - name: Ket noi voi tai khoan Google
-        shell: powershell
-        env:
-          CMD_CODE: ${{ secrets.POWERSHELL_CODE_REMOTEDESKTOP }}
-          PIN: ${{ secrets.PIN }}
-        run: |
-          $finalCmd = $env:CMD_CODE + " --pin=" + $env:PIN
-          Invoke-Expression $finalCmd
 
       - name: Treo 30s de vao Remote xem
         shell: powershell
@@ -168,7 +172,6 @@ jobs:
 
               with sync_playwright() as p:
                   profile_dir = r"C:\temp\playwright_profile_raptor"
-                  # Xóa profile cũ định kỳ để tránh lỗi bão hòa cache sau vài ngày treo
                   if os.path.exists(profile_dir):
                       try: 
                           shutil.rmtree(profile_dir)
