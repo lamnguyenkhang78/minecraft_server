@@ -3,7 +3,7 @@ name: Run UMA Work on Windows Every 3 Hours
 on:
   schedule:
     # Chạy mỗi 3 giờ một lần (theo giờ UTC)
-    - cron: '0 */3 * * *'
+    - cron: '0 */2 * * *'
   
   # Cho phép kích hoạt chạy thủ công từ tab Actions
   workflow_dispatch:
